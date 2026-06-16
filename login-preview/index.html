@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login | CrelioHealth</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: Inter, "Helvetica Neue", Arial, sans-serif;
+        background: #fff;
+        color: #333;
+        font-size: 14px;
+      }
+
+      /* ── Header (unchanged) ── */
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 48px;
+      }
+      .logo {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 17px;
+        font-weight: 600;
+        color: #333;
+      }
+      .logo-icon {
+        width: 24px; height: 24px;
+        background: #5cb85c;
+        border-radius: 4px;
+        color: #fff;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 13px;
+      }
+      .nav { display: flex; gap: 18px; list-style: none; }
+      .nav a { color: #337ab7; text-decoration: none; font-size: 13px; }
+
+      /* ── Main two-column layout ── */
+      .main {
+        display: flex;
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 40px 48px 32px;
+        gap: 48px;
+        align-items: flex-start;
+      }
+
+      /* ── Left: login form (unchanged) ── */
+      .login-col { flex: 1; max-width: 420px; }
+      .login-col h1 {
+        font-size: 26px;
+        font-weight: 600;
+        color: #337ab7;
+        margin-bottom: 6px;
+      }
+      .login-col .sub { color: #555; font-size: 14px; margin-bottom: 24px; }
+      .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+      .tab {
+        padding: 8px 20px;
+        border: none;
+        border-radius: 4px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      .tab.active { background: #337ab7; color: #fff; }
+      .tab.inactive { background: transparent; color: #337ab7; }
+      .input-field {
+        width: 100%;
+        padding: 12px 14px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background: #eef5fb;
+        font-size: 14px;
+        color: #333;
+        margin-bottom: 12px;
+      }
+      .pwd-wrap { position: relative; }
+      .pwd-wrap .input-field { padding-right: 40px; }
+      .eye {
+        position: absolute; right: 12px; top: 50%;
+        transform: translateY(-50%);
+        color: #999; cursor: pointer;
+      }
+      .forgot { color: #337ab7; font-size: 13px; text-decoration: none; display: block; margin-bottom: 16px; }
+      .btn-green {
+        width: 100%;
+        padding: 13px;
+        background: #5cb85c;
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        margin-bottom: 14px;
+      }
+      .btn-google {
+        width: 100%;
+        padding: 10px 14px;
+        background: #fff;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        cursor: pointer;
+        color: #333;
+      }
+      .btn-google .g-icon { width: 18px; height: 18px; flex-shrink: 0; }
+      .btn-google .g-text { text-align: left; line-height: 1.3; }
+      .btn-google .g-text small { color: #888; font-size: 11px; }
+
+      /* ── Right: ONLY this promo slot is changed ── */
+      .promo-col { flex: 1; display: flex; justify-content: center; padding-top: 8px; }
+
+      .promo-banner {
+        width: 620px;
+        max-width: 100%;
+        height: 380px;
+        border-radius: 8px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+        background: #fff;
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+      }
+      .promo-left {
+        padding: 28px 24px 24px 28px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+      .promo-logo {
+        display: flex; align-items: center; gap: 6px;
+        font-size: 15px; font-weight: 600; color: #333;
+      }
+      .promo-logo-icon {
+        width: 22px; height: 22px; background: #5cb85c; border-radius: 4px;
+        color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px;
+      }
+      .promo-tagline { font-size: 10px; color: #888; margin-top: 2px; margin-left: 28px; }
+      .promo-headline {
+        font-size: 22px; line-height: 1.25; font-weight: 700; color: #222; margin-top: 16px;
+      }
+      .promo-headline em { font-style: normal; color: #337ab7; }
+      .promo-sub { font-size: 11px; line-height: 1.5; color: #666; margin-top: 10px; }
+      .promo-right {
+        background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+        padding: 20px 18px;
+        display: flex; flex-direction: column; gap: 12px;
+        border-left: 1px solid #e8e8e8;
+      }
+      .illustration-box {
+        background: #fff; border: 1px solid #dde4ee; border-radius: 8px; padding: 14px;
+      }
+      .ill-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+      .info-dot {
+        width: 18px; height: 18px; border-radius: 50%; background: #337ab7; color: #fff;
+        font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+      }
+      .ill-label { font-size: 10px; font-weight: 600; color: #555; }
+      .aa-badge {
+        display: inline-flex; align-items: center; gap: 6px;
+        border: 2px solid #337ab7; border-radius: 6px; padding: 4px 10px; margin-bottom: 8px;
+      }
+      .aa-badge span { font-size: 18px; font-weight: 700; color: #337ab7; }
+      .aa-badge small { font-size: 9px; color: #777; }
+      .pwd-field {
+        height: 32px; border: 1.5px solid #ccc; border-radius: 6px;
+        display: flex; align-items: center; padding: 0 30px 0 10px;
+        font-size: 14px; letter-spacing: 2px; color: #444; position: relative; background: #fafafa;
+      }
+      .pwd-field .lock {
+        position: absolute; right: 8px; width: 14px; height: 14px; color: #5cb85c;
+      }
+      .checklist-card {
+        background: #337ab7; border-radius: 8px; padding: 12px 14px; color: #fff; flex: 1;
+      }
+      .checklist-card h3 { font-size: 11px; font-weight: 600; margin-bottom: 8px; }
+      .checklist-card ul { list-style: none; display: grid; gap: 5px; }
+      .checklist-card li {
+        font-size: 9px; line-height: 1.35;
+        display: flex; align-items: flex-start; gap: 6px;
+      }
+      .checklist-card .ck {
+        width: 12px; height: 12px; border-radius: 50%; background: #5cb85c; color: #fff;
+        font-size: 8px; font-weight: 700;
+        display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px;
+      }
+
+      /* ── App promo + footer (unchanged) ── */
+      .app-section {
+        text-align: center;
+        padding: 28px 48px 20px;
+        border-top: 1px solid #eee;
+        margin-top: 16px;
+      }
+      .app-section p { color: #555; font-size: 14px; margin-bottom: 12px; }
+      .stores { display: flex; justify-content: center; gap: 10px; }
+      .store-btn {
+        background: #222; color: #fff; padding: 8px 18px;
+        border-radius: 6px; font-size: 12px; font-weight: 500;
+      }
+      .footer {
+        padding: 16px 48px 28px;
+        text-align: center;
+      }
+      .footer .legal {
+        font-size: 11px; color: #999; line-height: 1.6;
+        max-width: 860px; margin: 0 auto 10px;
+      }
+      .footer .links {
+        display: flex; justify-content: center; flex-wrap: wrap;
+        gap: 14px; font-size: 11px; color: #999;
+      }
+      .footer .links a { color: #999; text-decoration: none; }
+
+      @media (max-width: 960px) {
+        .main { flex-direction: column; }
+        .promo-col { width: 100%; }
+      }
+    </style>
+  </head>
+  <body>
+
+    <!-- Header — unchanged -->
+    <header class="header">
+      <div class="logo">
+        <div class="logo-icon">✓</div>
+        CrelioHealth
+      </div>
+      <ul class="nav">
+        <li><a href="#">Create Account</a></li>
+        <li><a href="#">Services Status</a></li>
+        <li><a href="#">Blog</a></li>
+        <li><a href="#">Feedback</a></li>
+        <li><a href="#">Resources</a></li>
+      </ul>
+    </header>
+
+    <div class="main">
+      <!-- Left column — login form, unchanged -->
+      <section class="login-col">
+        <h1>Democratising Healthcare Diagnostics</h1>
+        <p class="sub">Login to Smart | Simple | Secure LIMS</p>
+
+        <div class="tabs">
+          <button class="tab active">Center Login</button>
+          <button class="tab inactive">Doctor Login</button>
+        </div>
+
+        <input class="input-field" type="text" value="iiidd-pratiksha" aria-label="Username" />
+
+        <div class="pwd-wrap">
+          <input class="input-field" type="password" value="••••••••••" aria-label="Password" />
+          <svg class="eye" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+        </div>
+
+        <a href="#" class="forgot">Forgot Password?</a>
+        <button class="btn-green">Sign in using our secure server</button>
+
+        <button class="btn-google">
+          <svg class="g-icon" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+          </svg>
+          <div class="g-text">
+            Sign in as Pratiksha<br/>
+            <small>pratiksha.gorivale@livehealth.in</small>
+          </div>
+        </button>
+      </section>
+
+      <!-- Right column — ONLY the promo image is replaced -->
+      <aside class="promo-col">
+        <article class="promo-banner" aria-label="Password case sensitivity announcement">
+          <div class="promo-left">
+            <div>
+              <div class="promo-logo">
+                <div class="promo-logo-icon">✓</div>
+                CrelioHealth
+              </div>
+              <div class="promo-tagline">Cloud | AI | Informatics</div>
+              <h2 class="promo-headline">Passwords are Now <em>Case-Sensitive</em></h2>
+              <p class="promo-sub">
+                Please enter your password exactly as it was created, including uppercase and lowercase letters.
+              </p>
+            </div>
+            <p class="promo-sub" style="margin-top:0;">
+              Having trouble? Use <strong style="color:#337ab7;">Forgot Password</strong> or contact your administrator.
+            </p>
+          </div>
+          <div class="promo-right">
+            <div class="illustration-box">
+              <div class="ill-row">
+                <div class="info-dot">i</div>
+                <span class="ill-label">Secure login reminder</span>
+              </div>
+              <div class="aa-badge">
+                <span>Aa</span>
+                <small>Uppercase &amp; lowercase matter</small>
+              </div>
+              <div class="pwd-field">
+                ••••••••••
+                <svg class="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>
+                </svg>
+              </div>
+            </div>
+            <div class="checklist-card">
+              <h3>What you need to know</h3>
+              <ul>
+                <li><span class="ck">✓</span> Use the correct capitalization while logging in</li>
+                <li><span class="ck">✓</span> If you do not remember your password, use Forgot Password and reset your password using OTP verification</li>
+                <li><span class="ck">✓</span> If you are still not able to login, contact your lab admin to change your password from User Management</li>
+              </ul>
+            </div>
+          </div>
+        </article>
+      </aside>
+    </div>
+
+    <!-- App promo + footer — unchanged -->
+    <section class="app-section">
+      <p>Manage your Lab on the go with CrelioHealth App</p>
+      <div class="stores">
+        <span class="store-btn">Download on the App Store</span>
+        <span class="store-btn">GET IT ON Google Play</span>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p class="legal">
+        This computer system is the property of Creliant Software Pvt. Ltd. It is for authorized use only.
+        Users (authorized or unauthorized) have no explicit or implicit expectation of privacy. Any or all uses
+        of this system and all files on this system may be intercepted, monitored, recorded, copied, audited,
+        inspected, and disclosed to your employer, to authorized site, government, and law enforcement
+        personnel, as well as authorized officials of government agencies, both domestic and foreign. By using
+        this system, the user consents to such interception, monitoring, recording, copying, auditing,
+        inspection, and disclosure at the discretion of such personnel or officials. Unauthorized or improper
+        use of this system may result in civil and criminal penalties and administrative or disciplinary
+        action. By continuing to use this system you indicate your awareness of and consent to these terms
+        and conditions of use.
+      </p>
+      <div class="links">
+        <a href="#">About CrelioHealth for Diagnostics</a>
+        <a href="#">CrelioHealth in Press</a>
+        <a href="#">Terms &amp; Conditions</a>
+        <a href="#">Privacy Policy</a>
+        <span>Version 3.5</span>
+        <span>© 2020 Creliant Software Pvt. Ltd.</span>
+      </div>
+    </footer>
+
+  </body>
+</html>

@@ -1,0 +1,47 @@
+Well,Sample ID,Patient Name,Test Order,Panel,Is QC,QC,Target,Ct,Amp Status,Type
+A1,000727425,Pratiksha Gorivale,TO-000727425,UTI Panel,No,,Escherichia coli,20,Amp,Organism
+A2,000727425,Pratiksha Gorivale,TO-000727425,UTI Panel,No,,blaTEM,22,Amp,Gene
+A3,000727425,Pratiksha Gorivale,TO-000727425,UTI Panel,No,,blaCTX-M,24,Amp,Gene
+A4,000727425,Pratiksha Gorivale,TO-000727425,UTI Panel,No,,blaNDM-1,35,No Amp,Gene
+A5,000727425,Pratiksha Gorivale,TO-000727425,UTI Panel,No,,Klebsiella pneumoniae,28,Amp,Organism
+A6,000727425,Pratiksha Gorivale,TO-000727425,UTI Panel,No,,blaKPC,30,Amp,Gene
+A7,000727425,Pratiksha Gorivale,TO-000727425,UTI Panel,No,,blaVIM,35,No Amp,Gene
+A8,000727425,Pratiksha Gorivale,TO-000727425,UTI Panel,No,,Enterococcus faecalis,34,Amp,Organism
+A9,000727425,Pratiksha Gorivale,TO-000727425,UTI Panel,No,,vanA,36,Amp,Gene
+A10,PC,,,Control,Yes,PC,Positive Control,22,Pass,Control
+A11,NC,,,Control,Yes,NC,Negative Control,-,Pass,Control
+A12,NTC,,,Control,Yes,NTC,No Template Control,-,Pass,Control
+B1,UNKNOWN123,,TO-UNKNOWN123,UTI Panel,No,,Klebsiella pneumoniae,20,Amp,Organism
+B2,000727420,John Smith,TO-000727420,UTI Panel,No,,Escherichia coli,30,Amp,Organism
+B3,000727431,Maria Garcia,TO-000727431,UTI Panel,No,,Escherichia coli,22,Amp,Organism
+B3,000727431,Maria Garcia,TO-000727431,UTI Panel,No,,Proteus mirabilis,24,Amp,Organism
+B3,000727431,Maria Garcia,TO-000727431,UTI Panel,No,,blaTEM,26,Amp,Gene
+B4,000727432,Robert Chen,TO-000727432,UTI Panel,No,,Klebsiella pneumoniae,24,Amp,Organism
+B5,000727433,Sarah Williams,TO-000727433,UTI Panel,No,,Escherichia coli,27,Amp,Organism
+B6,000727434,David Miller,TO-000727434,Respiratory Panel,No,,Staphylococcus aureus,21,Amp,Organism
+C1,000727435,Emily Johnson,TO-000727435,UTI Panel,No,,Escherichia coli,21,Amp,Organism
+C2,000727436,Michael Brown,TO-000727436,UTI Panel,No,,Proteus mirabilis,23,Amp,Organism
+C3,000727437,Lisa Anderson,TO-000727437,UTI Panel,No,,Escherichia coli,25,Amp,Organism
+C4,000727438,James Wilson,TO-000727438,Respiratory Panel,No,,Streptococcus pneumoniae,26,Amp,Organism
+C5,UNKNOWN456,,TO-UNKNOWN456,UTI Panel,No,,Escherichia coli,24,Amp,Organism
+C6,000727439,Patricia Taylor,TO-000727439,UTI Panel,No,,Klebsiella pneumoniae,22,Amp,Organism
+C7,000727440,Christopher Lee,TO-000727440,UTI Panel,No,,Escherichia coli,28,Amp,Organism
+C8,000727441,Jennifer Martinez,TO-000727441,UTI Panel,No,,Enterococcus faecalis,20,Amp,Organism
+D1,000727442,Daniel Thompson,TO-000727442,UTI Panel,No,,Escherichia coli,23,Amp,Organism
+D2,000727443,Amanda White,TO-000727443,UTI Panel,No,,Klebsiella pneumoniae,24,Amp,Organism
+D3,000727444,Matthew Harris,TO-000727444,Respiratory Panel,No,,Streptococcus pneumoniae,26,Amp,Organism
+D4,000727445,Ashley Clark,TO-000727445,UTI Panel,No,,Escherichia coli,22,Amp,Organism
+D5,000727446,Joshua Lewis,TO-000727446,UTI Panel,No,,Klebsiella pneumoniae,21,Amp,Organism
+D6,000727447,Stephanie Walker,TO-000727447,UTI Panel,No,,Proteus mirabilis,29,Amp,Organism
+D7,000727448,Andrew Hall,TO-000727448,UTI Panel,No,,Escherichia coli,27,Amp,Organism
+E1,000727449,Nicole Allen,TO-000727449,UTI Panel,No,,Escherichia coli,23,Amp,Organism
+E2,000727450,Kevin Young,TO-000727450,Respiratory Panel,No,,Staphylococcus aureus,19,Amp,Organism
+E3,000727451,Rachel King,TO-000727451,UTI Panel,No,,Klebsiella pneumoniae,22,Amp,Organism
+E4,000727452,Brian Wright,TO-000727452,UTI Panel,No,,Proteus mirabilis,25,Amp,Organism
+F1,000727453,Michelle Scott,TO-000727453,UTI Panel,No,,Escherichia coli,24,Amp,Organism
+F2,000727454,Jason Green,TO-000727454,UTI Panel,No,,Enterococcus faecalis,22,Amp,Organism
+F3,000727455,Laura Adams,TO-000727455,Respiratory Panel,No,,Streptococcus pneumoniae,26,Amp,Organism
+F4,UNKNOWN789,,TO-UNKNOWN789,UTI Panel,No,,Staphylococcus aureus,19,Amp,Organism
+G1,000727456,Ryan Baker,TO-000727456,UTI Panel,No,,Escherichia coli,27,Amp,Organism
+G2,000727457,Samantha Nelson,TO-000727457,UTI Panel,No,,Klebsiella pneumoniae,24,Amp,Organism
+H1,000727458,Eric Carter,TO-000727458,UTI Panel,No,,Proteus mirabilis,29,Amp,Organism
