@@ -1,27 +1,20 @@
 import { Drawer } from './ui/Drawer'
 import { Badge } from './ui/Badge'
 import { formatInterpretationDisplay } from '../utils/interpretation'
-import type { WellData, WellStatus } from '../types'
+import type { WellData } from '../types'
 
 interface WellDetailsDrawerProps {
   well: WellData | null
   onClose: () => void
 }
 
-function statusBadgeVariant(status: WellStatus) {
-  if (status === 'ready') return 'success' as const
-  if (status === 'failed') return 'error' as const
-  if (status === 'control') return 'info' as const
-  if (status === 'review') return 'warning' as const
-  return 'neutral' as const
+function controlStatusPassed(well: WellData): boolean {
+  if (well.isQc || well.status === 'control') return !well.controlFailed
+  return well.controlsPassed ?? !well.isFailed
 }
 
-function statusLabel(status: WellStatus): string {
-  if (status === 'ready') return 'Ready for Release'
-  if (status === 'failed') return 'Failed'
-  if (status === 'control') return 'QC Control'
-  if (status === 'review') return 'Needs Review'
-  return 'Empty'
+function controlStatusVariant(passed: boolean) {
+  return passed ? 'success' as const : 'error' as const
 }
 
 function Field({ label, value }: { label: string; value: string }) {
@@ -38,7 +31,7 @@ export function WellDetailsDrawer({ well, onClose }: WellDetailsDrawerProps) {
 
   const isControl = well.isQc || well.status === 'control'
   const totalTargets = well.totalTargetCount ?? well.detectedTargets.length + well.notDetectedTargets.length
-  const notDetectedCount = well.notDetectedCount ?? well.notDetectedTargets.length
+  const controlPassed = controlStatusPassed(well)
 
   return (
     <Drawer
@@ -69,16 +62,15 @@ export function WellDetailsDrawer({ well, onClose }: WellDetailsDrawerProps) {
             <button className="flex-1 px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700">
               Release Sample
             </button>
-            <button className="px-3 py-1.5 border border-slate-200 text-slate-600 rounded text-xs hover:bg-slate-50">
-              View Report
-            </button>
           </div>
         )
       }
     >
       <div className="space-y-4 text-xs">
         <div className="flex items-center gap-2">
-          <Badge variant={statusBadgeVariant(well.status)}>{statusLabel(well.status)}</Badge>
+          <Badge variant={controlStatusVariant(controlPassed)}>
+            {controlPassed ? 'Passed' : 'Failed'}
+          </Badge>
           {isControl && <Badge variant="info">Is QC</Badge>}
         </div>
 
@@ -88,14 +80,8 @@ export function WellDetailsDrawer({ well, onClose }: WellDetailsDrawerProps) {
           <Field label="Sample ID" value={well.sampleId} />
           <Field label="Patient" value={well.patient} />
           <Field label="Test Order" value={well.testOrder} />
-          <Field label="Panel" value={well.panel} />
           {isControl && <Field label="QC Type" value={well.qcType || 'Control'} />}
-          {!isControl && (
-            <>
-              <Field label="Targets Tested" value={String(totalTargets)} />
-              <Field label="Not Detected" value={String(notDetectedCount)} />
-            </>
-          )}
+          {!isControl && <Field label="Targets Tested" value={String(totalTargets)} />}
         </div>
 
         {well.isFailed && well.validationErrors && (
@@ -144,7 +130,7 @@ export function WellDetailsDrawer({ well, onClose }: WellDetailsDrawerProps) {
             </div>
             <div className="flex flex-wrap gap-1">
               {well.detectedTargets.map((t) => (
-                <Badge key={t} variant="success">{t}</Badge>
+                <Badge key={t} variant="error">{t}</Badge>
               ))}
             </div>
           </div>
@@ -158,28 +144,6 @@ export function WellDetailsDrawer({ well, onClose }: WellDetailsDrawerProps) {
             <div className="flex flex-wrap gap-1">
               {well.notDetectedTargets.map((t) => (
                 <Badge key={t} variant="neutral">{t}</Badge>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {well.validationChecks.length > 0 && (
-          <div>
-            <div className="font-semibold text-slate-700 mb-1.5">Validation Checks</div>
-            <div className="space-y-1">
-              {well.validationChecks.map((check) => (
-                <div key={check.label} className="flex items-center gap-2">
-                  {check.passed ? (
-                    <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : (
-                    <svg className="w-3.5 h-3.5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  )}
-                  <span className={check.passed ? 'text-slate-700' : 'text-red-600'}>{check.label}</span>
-                </div>
               ))}
             </div>
           </div>

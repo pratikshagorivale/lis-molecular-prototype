@@ -1,25 +1,30 @@
 import { useEffect, useState } from 'react'
 import { Badge } from './ui/Badge'
 import { formatInterpretationDisplay } from '../utils/interpretation'
-import type { SampleGroup, WellData } from '../types'
+import type { ResultRow, SampleGroup, WellData } from '../types'
 
 interface TableViewProps {
   groups: SampleGroup[]
   plateWells: WellData[]
   onWellOpen: (well: WellData) => void
-  showErrorsOnly: boolean
   searchQuery: string
 }
 
-function statusVariant(status: string) {
-  if (status === 'Ready for Release' || status === 'Ready') return 'success' as const
-  if (status === 'Failed') return 'error' as const
-  return 'warning' as const
+function controlStatusVariant(passed: boolean) {
+  return passed ? 'success' as const : 'error' as const
 }
 
-export function TableView({ groups, plateWells, onWellOpen, showErrorsOnly, searchQuery }: TableViewProps) {
+function wellRowKey(sampleId: string, row: ResultRow, index: number) {
+  return `${sampleId}|${row.well}|${row.targetName}|${index}`
+}
+
+function groupWellKeys(group: SampleGroup) {
+  return group.rows.map((row, index) => wellRowKey(group.sampleId, row, index))
+}
+
+export function TableView({ groups, plateWells, onWellOpen, searchQuery }: TableViewProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [selectedWells, setSelectedWells] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (groups.length === 0) return
@@ -31,7 +36,6 @@ export function TableView({ groups, plateWells, onWellOpen, showErrorsOnly, sear
   }, [groups])
 
   const filtered = groups.filter((g) => {
-    if (showErrorsOnly && g.status !== 'Failed') return false
     if (searchQuery && !g.sampleId.includes(searchQuery)) return false
     return true
   })
@@ -45,11 +49,27 @@ export function TableView({ groups, plateWells, onWellOpen, showErrorsOnly, sear
     })
   }
 
-  const toggleSelect = (id: string) => {
-    setSelected((prev) => {
+  const isGroupFullySelected = (group: SampleGroup) => {
+    const keys = groupWellKeys(group)
+    return keys.length > 0 && keys.every((key) => selectedWells.has(key))
+  }
+
+  const toggleSampleSelect = (group: SampleGroup) => {
+    const keys = groupWellKeys(group)
+    const allSelected = isGroupFullySelected(group)
+    setSelectedWells((prev) => {
       const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+      if (allSelected) keys.forEach((key) => next.delete(key))
+      else keys.forEach((key) => next.add(key))
+      return next
+    })
+  }
+
+  const toggleWellRow = (key: string) => {
+    setSelectedWells((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
       return next
     })
   }
@@ -73,8 +93,8 @@ export function TableView({ groups, plateWells, onWellOpen, showErrorsOnly, sear
           <div className={`px-3 py-2 flex items-center gap-3 ${group.status === 'Failed' ? 'bg-red-50' : 'bg-blue-50/60'}`}>
             <input
               type="checkbox"
-              checked={selected.has(group.sampleId)}
-              onChange={() => toggleSelect(group.sampleId)}
+              checked={isGroupFullySelected(group)}
+              onChange={() => toggleSampleSelect(group)}
               className="rounded border-slate-300 text-blue-600"
             />
             <button onClick={() => toggleExpand(group.sampleId)} className="text-slate-400 hover:text-slate-600">
@@ -86,19 +106,13 @@ export function TableView({ groups, plateWells, onWellOpen, showErrorsOnly, sear
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-semibold text-slate-800">Sample ID: {group.sampleId}</span>
                 <span className="text-xs text-slate-500">Patient: {group.patient}</span>
-                {group.testOrder && <span className="text-xs text-slate-500">Test Order: {group.testOrder}</span>}
-                <span className="text-xs text-slate-500">Panel: {group.panel}</span>
-                <Badge variant={statusVariant(group.status)}>{group.status}</Badge>
               </div>
               {group.error && (
                 <div className="text-[11px] text-red-600 mt-0.5">Error: {group.error}</div>
               )}
               <div className="flex gap-2 mt-1">
                 <span className="text-[10px] bg-white border border-slate-200 px-1.5 py-0.5 rounded text-slate-600">
-                  Detected Organisms: {group.detectedOrganisms}
-                </span>
-                <span className="text-[10px] bg-white border border-slate-200 px-1.5 py-0.5 rounded text-slate-600">
-                  Resistance Genes: {group.resistanceGenes}
+                  Detected Targets: {group.detectedOrganisms}
                 </span>
                 {group.controlsPassed && (
                   <span className="text-[10px] bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded text-emerald-700">
@@ -125,21 +139,33 @@ export function TableView({ groups, plateWells, onWellOpen, showErrorsOnly, sear
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-slate-100 text-slate-600">
+                    <th className="px-2 py-1.5 w-8" />
                     <th className="px-2 py-1.5 text-left font-medium">Well</th>
                     <th className="px-2 py-1.5 text-left font-medium">Plate ID</th>
-                    <th className="px-2 py-1.5 text-left font-medium">Target Name</th>
-                    <th className="px-2 py-1.5 text-left font-medium">Ct Value</th>
-                    <th className="px-2 py-1.5 text-left font-medium">Amp Status</th>
+                    <th className="px-2 py-1.5 text-left font-medium">Target</th>
+                    <th className="px-2 py-1.5 text-left font-medium">Result</th>
+                    <th className="px-2 py-1.5 text-left font-medium">Interpretation</th>
                     <th className="px-2 py-1.5 text-left font-medium">Type</th>
                     <th className="px-2 py-1.5 text-left font-medium">Resistant Antibiotics</th>
                     <th className="px-2 py-1.5 text-left font-medium">Sensitive Antibiotics</th>
-                    <th className="px-2 py-1.5 text-left font-medium">Status</th>
+                    <th className="px-2 py-1.5 text-left font-medium">Control Status</th>
                     <th className="px-2 py-1.5 text-left font-medium">Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {group.rows.map((row) => (
-                    <tr key={row.well} className="border-t border-slate-100 hover:bg-slate-50">
+                  {group.rows.map((row, index) => {
+                    const rowKey = wellRowKey(group.sampleId, row, index)
+                    return (
+                    <tr key={rowKey} className="border-t border-slate-100 hover:bg-slate-50">
+                      <td className="px-2 py-1.5">
+                        <input
+                          type="checkbox"
+                          checked={selectedWells.has(rowKey)}
+                          onChange={() => toggleWellRow(rowKey)}
+                          className="rounded border-slate-300 text-blue-600"
+                          aria-label={`Select well ${row.well}`}
+                        />
+                      </td>
                       <td className="px-2 py-1.5">
                         <button
                           type="button"
@@ -161,7 +187,9 @@ export function TableView({ groups, plateWells, onWellOpen, showErrorsOnly, sear
                       <td className="px-2 py-1.5 text-slate-600">{row.resistantAntibiotics}</td>
                       <td className="px-2 py-1.5 text-slate-600">{row.sensitiveAntibiotics}</td>
                       <td className="px-2 py-1.5">
-                        <Badge variant={statusVariant(row.status)}>{row.status}</Badge>
+                        <Badge variant={controlStatusVariant(group.controlsPassed)}>
+                          {group.controlsPassed ? 'Passed' : 'Failed'}
+                        </Badge>
                       </td>
                       <td className="px-2 py-1.5">
                         <div className="flex items-center gap-1">
@@ -174,7 +202,8 @@ export function TableView({ groups, plateWells, onWellOpen, showErrorsOnly, sear
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

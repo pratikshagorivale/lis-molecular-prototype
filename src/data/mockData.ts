@@ -185,6 +185,7 @@ export const wellA1Details: WellData = {
     { label: 'Controls Passed', passed: true },
   ],
   isFailed: false,
+  controlsPassed: true,
 }
 
 export const wellB1Details: WellData = {

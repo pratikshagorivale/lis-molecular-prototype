@@ -79,6 +79,7 @@ export interface WellData {
   validationErrors?: string[]
   isFailed: boolean
   controlFailed?: boolean
+  controlsPassed?: boolean
 }
 
 export interface FailedControlWell {

@@ -50,13 +50,12 @@ function wellDisplayLabel(well: Pick<WellData, 'sampleId' | 'label' | 'qcType'>)
   return sampleId || label || ''
 }
 
-type TargetDotState = 'detected' | 'notDetected' | 'inconclusive' | 'passed'
+type TargetDotState = 'detected' | 'notDetected' | 'inconclusive'
 
 const dotStyles: Record<TargetDotState, string> = {
   detected: 'bg-red-500',
   notDetected: 'bg-emerald-500',
   inconclusive: 'bg-amber-400',
-  passed: 'bg-blue-500',
 }
 
 function totalTargetsTested(well: WellData): number {
@@ -67,11 +66,11 @@ function totalTargetsTested(well: WellData): number {
 
 function targetDotStates(well: WellData): TargetDotState[] {
   if (well.ctValues.length > 0) {
-    return well.ctValues.map((cv) => {
-      if (cv.interpretation === 'Passed') return 'passed'
-      if (isInconclusiveAmpStatus(cv.ampStatus)) return 'inconclusive'
-      if (isPositiveResult(cv.interpretation, cv.ampStatus, cv.ct)) return 'detected'
-      return 'notDetected'
+    return well.ctValues.flatMap((cv) => {
+      if (cv.interpretation === 'Passed') return []
+      if (isInconclusiveAmpStatus(cv.ampStatus)) return ['inconclusive']
+      if (isPositiveResult(cv.interpretation, cv.ampStatus, cv.ct)) return ['detected']
+      return ['notDetected']
     })
   }
   return [
@@ -116,7 +115,6 @@ export function PlateView({ wells, onWellClick }: PlateViewProps) {
           <span className="w-1.5 h-1.5 rounded-full bg-red-500" /> Detected
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 ml-2" /> Not Detected
           <span className="w-1.5 h-1.5 rounded-full bg-amber-400 ml-2" /> Inconclusive
-          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 ml-2" /> QC Passed
         </span>
       </div>
 

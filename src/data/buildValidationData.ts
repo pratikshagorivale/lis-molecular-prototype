@@ -83,6 +83,7 @@ function buildPlateWellsFromRecords(
   plateId: string,
   defaultPanel: string,
   failedControlWellIds: Set<string> = new Set(),
+  qcPassed = true,
 ): WellData[] {
   const byWell = new Map<string, RawMolecularRow[]>()
   const unmappedBySample = new Map<string, RawMolecularRow[]>()
@@ -198,13 +199,19 @@ function buildPlateWellsFromRecords(
         validationErrors: validationErrors.length ? validationErrors : undefined,
         isFailed: status === 'failed' || (isControl && failedControlWellIds.has(wellId)),
         controlFailed: isControl && failedControlWellIds.has(wellId),
+        controlsPassed: isControl ? !failedControlWellIds.has(wellId) : qcPassed,
       })
     }
   }
   return wells
 }
 
-function buildSampleGroups(records: RawMolecularRow[], plateId: string, defaultPanel: string): SampleGroup[] {
+function buildSampleGroups(
+  records: RawMolecularRow[],
+  plateId: string,
+  defaultPanel: string,
+  qcPassed: boolean,
+): SampleGroup[] {
   const bySample = new Map<string, RawMolecularRow[]>()
   for (const r of records) {
     if (isControlRecord(r)) continue
@@ -244,7 +251,7 @@ function buildSampleGroups(records: RawMolecularRow[], plateId: string, defaultP
       error: status === 'Failed' ? 'Sample not found in LIS' : undefined,
       detectedOrganisms: organisms,
       resistanceGenes: genes,
-      controlsPassed: status !== 'Failed',
+      controlsPassed: qcPassed,
       selected: false,
       rows: resultRows,
     }
@@ -350,9 +357,9 @@ export function buildValidationData(input: BuildInput): ParsedUploadData {
   }))
 
   const { plateSummary, validationSummary, qcBanner } = buildSummaries(records, plateId, device, runDate, plateSize)
-  const sampleGroups = buildSampleGroups(records, plateId, defaultPanel)
+  const sampleGroups = buildSampleGroups(records, plateId, defaultPanel, qcBanner.qcPassed)
   const failedControlWellIds = new Set(qcBanner.failedControlWells.map((f) => f.wellId))
-  const plateWells = buildPlateWellsFromRecords(records, plateId, defaultPanel, failedControlWellIds)
+  const plateWells = buildPlateWellsFromRecords(records, plateId, defaultPanel, failedControlWellIds, qcBanner.qcPassed)
 
   const readyCount = sampleGroups.filter((g) => g.status === 'Ready for Release').length
   const reviewCount = sampleGroups.filter((g) => g.status === 'Needs Review').length
