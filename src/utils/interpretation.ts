@@ -96,6 +96,13 @@ function matchesDetected(v: string): boolean {
   return false
 }
 
+/** True when raw amp status text indicates no amplification. */
+export function isAmpStatusNotDetected(rawValue: unknown): boolean {
+  const v = normalizeAmpStatusCell(rawValue).toLowerCase()
+  if (!v) return false
+  return matchesNotDetected(v)
+}
+
 /** True when raw amp status text indicates amplification, even if Ct is undetermined. */
 export function isAmpStatusDetected(rawValue: unknown): boolean {
   const v = normalizeAmpStatusCell(rawValue).toLowerCase()
@@ -148,6 +155,15 @@ export function isPositiveResult(
 export function isInconclusiveAmpStatus(ampStatus?: string): boolean {
   const v = normalizeAmpStatusCell(ampStatus).toLowerCase()
   return /^inconclusive/.test(v) || /^undetermined/.test(v) || v === 'u'
+}
+
+/** User-facing interpretation; inconclusive amp status takes precedence over Ct-inferred Detected. */
+export function displayTargetInterpretation(
+  interpretation: Interpretation,
+  ampStatus?: string,
+): Interpretation | 'Inconclusive' {
+  if (ampStatus?.trim() && isInconclusiveAmpStatus(ampStatus)) return 'Inconclusive'
+  return interpretation
 }
 
 export function formatInterpretationDisplay(interpretation: Interpretation, ampStatus?: string): string {

@@ -1,10 +1,52 @@
 import { useRef, useState, useEffect } from 'react'
 import { Modal } from './ui/Modal'
 import { Accordion } from './ui/Accordion'
-import { Badge } from './ui/Badge'
 import type { FileParseContext, ParsedUploadData, PlateSize, PreviewRow, UserFieldMapping } from '../types'
 import { PLATE_SIZE_OPTIONS } from '../types'
-import { formatInterpretationDisplay } from '../utils/interpretation'
+import { displayTargetInterpretation } from '../utils/interpretation'
+import { MAPPING_FIELD_DEFS, syncUserMappingsWithFieldDefs } from '../utils/parseMolecularFile'
+
+const PREVIEW_COLUMN_KEYS = ['well', 'sampleId', 'target', 'result', 'interpretation', 'ampStatus', 'viralLoad'] as const
+
+function previewColumnLabel(key: (typeof PREVIEW_COLUMN_KEYS)[number]): string {
+  return MAPPING_FIELD_DEFS.find((field) => field.key === key)?.label ?? key
+}
+
+function previewInterpretationLabel(row: PreviewRow): string {
+  if (row.interpretationValue?.trim()) return row.interpretationValue.trim()
+  return displayTargetInterpretation(row.interpretation, row.ampStatus)
+}
+
+function previewInterpretationClassName(label: string): string {
+  const normalized = label.trim().toLowerCase()
+  if (normalized === 'detected' || normalized === 'detetected') return 'text-red-600 font-medium'
+  if (normalized.includes('not detected') || normalized.includes('not detect')) return 'text-emerald-600 font-medium'
+  if (normalized.includes('inconclusive') || normalized.includes('undetermined')) return 'text-amber-600 font-medium'
+  return 'text-slate-600'
+}
+
+function renderPreviewCell(row: PreviewRow, key: (typeof PREVIEW_COLUMN_KEYS)[number]) {
+  switch (key) {
+    case 'well':
+      return row.wellPosition || '—'
+    case 'sampleId':
+      return row.sampleId
+    case 'target':
+      return row.targetName
+    case 'result':
+      return row.ctValue ?? '—'
+    case 'interpretation': {
+      const label = previewInterpretationLabel(row)
+      return <span className={previewInterpretationClassName(label)}>{label}</span>
+    }
+    case 'ampStatus':
+      return row.ampStatus || '—'
+    case 'viralLoad':
+      return row.viralLoad || '—'
+    default:
+      return '—'
+  }
+}
 
 interface UploadMolecularResultsModalProps {
   open: boolean
@@ -248,18 +290,13 @@ export function UploadMolecularResultsModal({
     setRows((prev) => prev.map((r) => (r.validationStatus === 'Valid' ? { ...r, selected: newVal } : r)))
   }
 
-  const statusBadge = (status: string) => {
-    if (status === 'Valid') return <Badge variant="success">Valid</Badge>
-    if (status === 'Error') return <Badge variant="error">Error</Badge>
-    return <Badge variant="warning">Warning</Badge>
-  }
-
   const updateMapping = (key: string, sourceColumn: string) => {
-    onMappingsChange(userMappings.map((m) => (m.key === key ? { ...m, sourceColumn } : m)))
+    const synced = syncUserMappingsWithFieldDefs(userMappings)
+    onMappingsChange(synced.map((m) => (m.key === key ? { ...m, sourceColumn } : m)))
   }
 
   const canContinue = !!uploadData && uploadData.previewRows.length > 0 && !!plateId.trim()
-  const plateIdFromFile = !!userMappings.find((m) => m.key === 'plateId')?.sourceColumn
+  const plateIdFromFile = !!syncUserMappingsWithFieldDefs(userMappings).find((m) => m.key === 'plateId')?.sourceColumn
 
   return (
     <Modal
@@ -401,16 +438,18 @@ export function UploadMolecularResultsModal({
                 </tr>
               </thead>
               <tbody>
-                {userMappings.map((m) => (
-                  <tr key={m.key} className="border-b border-slate-100">
+                {MAPPING_FIELD_DEFS.map((def) => {
+                  const sourceColumn = userMappings.find((m) => m.key === def.key)?.sourceColumn ?? ''
+                  return (
+                  <tr key={def.key} className="border-b border-slate-100">
                     <td className="px-2 py-1.5 text-slate-700">
-                      {m.label}
-                      {m.required && <span className="text-red-500 ml-0.5">*</span>}
+                      {def.label}
+                      {def.required && <span className="text-red-500 ml-0.5">*</span>}
                     </td>
                     <td className="px-2 py-1.5">
                       <select
-                        value={m.sourceColumn}
-                        onChange={(e) => updateMapping(m.key, e.target.value)}
+                        value={sourceColumn}
+                        onChange={(e) => updateMapping(def.key, e.target.value)}
                         disabled={applying}
                         className="w-full px-2 py-1 border border-slate-200 rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
                       >
@@ -421,7 +460,8 @@ export function UploadMolecularResultsModal({
                       </select>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
             {(applying || mappingError) && (
@@ -448,13 +488,11 @@ export function UploadMolecularResultsModal({
                     <thead className="sticky top-0">
                       <tr className="bg-slate-700 text-white">
                         <th className="w-8 px-2 py-1.5"></th>
-                        <th className="px-2 py-1.5 text-left font-medium">Well Position</th>
-                        <th className="px-2 py-1.5 text-left font-medium">Sample ID</th>
-                        <th className="px-2 py-1.5 text-left font-medium">Target Name</th>
-                        <th className="px-2 py-1.5 text-left font-medium">Result</th>
-                        <th className="px-2 py-1.5 text-left font-medium">Amp Status</th>
-                        <th className="px-2 py-1.5 text-left font-medium">Viral Load</th>
-                        <th className="px-2 py-1.5 text-left font-medium">Validation Status</th>
+                        {PREVIEW_COLUMN_KEYS.map((key) => (
+                          <th key={key} className="px-2 py-1.5 text-left font-medium">
+                            {previewColumnLabel(key)}
+                          </th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
@@ -465,20 +503,11 @@ export function UploadMolecularResultsModal({
                               <input type="checkbox" checked={row.selected} onChange={() => toggleRow(row.id)} className="rounded border-slate-300 text-blue-600" />
                             )}
                           </td>
-                          <td className="px-2 py-1.5 text-slate-600">{row.wellPosition || '—'}</td>
-                          <td className="px-2 py-1.5 font-medium text-slate-800">{row.sampleId}</td>
-                          <td className="px-2 py-1.5 text-slate-700">{row.targetName}</td>
-                          <td className="px-2 py-1.5 text-slate-600">{row.ctValue}</td>
-                          <td className="px-2 py-1.5 text-slate-600">
-                            <span className={row.interpretation === 'Detected' ? 'text-red-600 font-medium' : row.interpretation === 'Not Detected' ? 'text-slate-500' : ''}>
-                              {formatInterpretationDisplay(row.interpretation, row.ampStatus)}
-                            </span>
-                            {row.ampStatus && row.interpretation !== 'Detected' && row.interpretation !== 'Not Detected' && row.interpretation !== 'Passed' && (
-                              <span className="block text-[10px] text-amber-600">→ {row.interpretation}</span>
-                            )}
-                          </td>
-                          <td className="px-2 py-1.5 text-slate-600">{row.viralLoad || '—'}</td>
-                          <td className="px-2 py-1.5">{statusBadge(row.validationStatus)}</td>
+                          {PREVIEW_COLUMN_KEYS.map((key) => (
+                            <td key={key} className="px-2 py-1.5 text-slate-600">
+                              {renderPreviewCell(row, key)}
+                            </td>
+                          ))}
                         </tr>
                       ))}
                     </tbody>

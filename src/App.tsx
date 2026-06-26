@@ -4,11 +4,13 @@ import { DeviceResultsValidationHome } from './pages/DeviceResultsValidationHome
 import { MolecularValidation } from './pages/MolecularValidation'
 import { WaitingListPage } from './pages/WaitingListPage'
 import { MolecularReportEntryPage } from './pages/MolecularReportEntryPage'
+import { InstrumentManagementListPage } from './pages/InstrumentManagementListPage'
+import { InstrumentDetailPage } from './pages/InstrumentDetailPage'
 import { partiallyCompletedEntries } from './data/waitingListMockData'
+import { managedInstruments as initialManagedInstruments } from './data/instrumentManagementMockData'
 import { buildMolecularReportFromUpload, resolveWaitingEntryForUpload } from './utils/sendResultsToReport'
 import type { MolecularReportData } from './types'
 import { UploadMolecularResultsModal } from './components/UploadMolecularResultsModal'
-import { WellDetailsDrawer } from './components/WellDetailsDrawer'
 import { ReleaseConfirmationModal } from './components/ReleaseConfirmationModal'
 import { Toast } from './components/ui/Toast'
 import { loadLisRegistry } from './data/lisSampleRegistry'
@@ -16,10 +18,25 @@ import {
   readSpreadsheetFile,
   buildUploadDataFromContext,
   createAutoMappings,
+  mappingsNeedSync,
   mappingsReadyForPreview,
+  syncUserMappingsWithFieldDefs,
   updateFileContextRowSettings,
 } from './utils/parseMolecularFile'
-import type { AppNav, FileParseContext, ParsedUploadData, PlateSize, Screen, UserFieldMapping, WaitingListEntry, WellData } from './types'
+import { countReleaseableSamples } from './utils/releaseSamples'
+import type {
+  AppNav,
+  FileParseContext,
+  InstrumentControlConfig,
+  ManagedInstrument,
+  ParsedUploadData,
+  PlateSize,
+  QcView,
+  Screen,
+  UserFieldMapping,
+  WaitingListEntry,
+  WellData,
+} from './types'
 
 function normalizeHeaderForMapping(value: string): string {
   return value.trim().toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ')
@@ -42,8 +59,12 @@ function App() {
   const [plateSize, setPlateSize] = useState<PlateSize>(96)
   const [selectedWell, setSelectedWell] = useState<WellData | null>(null)
   const [releaseModalOpen, setReleaseModalOpen] = useState(false)
-  const [releaseMode, setReleaseMode] = useState<'plate' | 'selected'>('plate')
+  const [releaseMode, setReleaseMode] = useState<'plate' | 'selected' | 'valid-only'>('plate')
+  const [releaseCounts, setReleaseCounts] = useState({ validCount: 0, totalCount: 0 })
   const [toast, setToast] = useState<string | null>(null)
+  const [qcView, setQcView] = useState<QcView>('list')
+  const [managedInstruments, setManagedInstruments] = useState<ManagedInstrument[]>(initialManagedInstruments)
+  const [selectedManagedInstrumentId, setSelectedManagedInstrumentId] = useState<string | null>(null)
 
   useEffect(() => {
     loadLisRegistry()
@@ -61,9 +82,11 @@ function App() {
     setApplying(true)
     setMappingError(null)
     try {
+      const molecularControls = managedInstruments.find((i) => i.isMolecular)?.controls ?? []
       const data = await buildUploadDataFromContext(context, mappings, {
         plateIdOverride: options?.plateIdOverride ?? plateIdInput,
         plateSize: options?.plateSize ?? plateSize,
+        instrumentControls: molecularControls,
       })
       setUploadData(data)
       setPlateIdInput(data.plateSummary.plateId)
@@ -73,7 +96,7 @@ function App() {
     } finally {
       setApplying(false)
     }
-  }, [plateIdInput, plateSize])
+  }, [plateIdInput, plateSize, managedInstruments])
 
   const processFile = useCallback(async (file: File) => {
     setParsing(true)
@@ -111,15 +134,25 @@ function App() {
   }, [fileContext, userMappings, applyMappings])
 
   const handleMappingsChange = useCallback((mappings: UserFieldMapping[]) => {
-    setUserMappings(mappings)
+    const synced = syncUserMappingsWithFieldDefs(mappings)
+    setUserMappings(synced)
     if (!fileContext) return
-    if (mappingsReadyForPreview(mappings)) {
-      applyMappings(fileContext, mappings)
+    if (mappingsReadyForPreview(synced)) {
+      applyMappings(fileContext, synced)
     } else {
       setUploadData(null)
       setMappingError(null)
     }
   }, [fileContext, applyMappings])
+
+  useEffect(() => {
+    if (!fileContext || userMappings.length === 0 || !mappingsNeedSync(userMappings)) return
+    const synced = syncUserMappingsWithFieldDefs(userMappings)
+    setUserMappings(synced)
+    if (mappingsReadyForPreview(synced)) {
+      applyMappings(fileContext, synced)
+    }
+  }, [fileContext, userMappings, applyMappings])
 
   const handleHeaderRowChange = useCallback((headerRow: number) => {
     if (!fileContext) return
@@ -147,20 +180,39 @@ function App() {
     setSelectedWell(well)
   }, [])
 
-  const handleReleasePlate = useCallback(() => {
-    setReleaseMode('plate')
+  const openReleaseModal = useCallback((mode: 'plate' | 'selected' | 'valid-only') => {
+    if (uploadData) {
+      const { validCount, totalCount } = countReleaseableSamples(uploadData.sampleGroups)
+      setReleaseCounts({ validCount, totalCount })
+    }
+    setReleaseMode(mode)
     setReleaseModalOpen(true)
-  }, [])
+  }, [uploadData])
+
+  const handleReleasePlate = useCallback(() => {
+    openReleaseModal('plate')
+  }, [openReleaseModal])
+
+  const handleReleaseValidOnly = useCallback(() => {
+    openReleaseModal('valid-only')
+  }, [openReleaseModal])
 
   const handleReleaseSelected = useCallback(() => {
-    setReleaseMode('selected')
-    setReleaseModalOpen(true)
-  }, [])
+    openReleaseModal('selected')
+  }, [openReleaseModal])
 
   const handleConfirmRelease = useCallback(() => {
     setReleaseModalOpen(false)
-    setToast('Results released successfully.')
-  }, [])
+    if (releaseMode === 'valid-only') {
+      setToast(`${releaseCounts.validCount} valid sample result${releaseCounts.validCount === 1 ? '' : 's'} released successfully.`)
+      return
+    }
+    if (releaseMode === 'plate') {
+      setToast(`All ${releaseCounts.totalCount} sample result${releaseCounts.totalCount === 1 ? '' : 's'} released successfully.`)
+      return
+    }
+    setToast('Selected results released successfully.')
+  }, [releaseMode, releaseCounts])
 
   const handleContinueToValidation = useCallback(() => {
     if (!uploadData) return
@@ -190,6 +242,29 @@ function App() {
     setActiveNav(id)
     if (id === 'device-validation') setScreen('home')
     if (id === 'waiting') setWaitingView('list')
+    if (id === 'qc') {
+      setQcView('list')
+      setSelectedManagedInstrumentId(null)
+    }
+  }, [])
+
+  const selectedManagedInstrument = managedInstruments.find((i) => i.id === selectedManagedInstrumentId) ?? null
+
+  const handleSelectManagedInstrument = useCallback((instrumentId: string) => {
+    setSelectedManagedInstrumentId(instrumentId)
+    setQcView('detail')
+  }, [])
+
+  const handleManagedInstrumentBack = useCallback(() => {
+    setQcView('list')
+    setSelectedManagedInstrumentId(null)
+  }, [])
+
+  const handleUpdateInstrumentControls = useCallback((instrumentId: string, controls: InstrumentControlConfig[]) => {
+    setManagedInstruments((prev) => prev.map((instrument) => (
+      instrument.id === instrumentId ? { ...instrument, controls } : instrument
+    )))
+    setToast('Control configuration saved.')
   }, [])
 
   const handleOpenReport = useCallback((entry: WaitingListEntry) => {
@@ -214,9 +289,13 @@ function App() {
       {activeNav === 'device-validation' && screen === 'validation' && uploadData && (
         <MolecularValidation
           uploadData={uploadData}
+          selectedWell={selectedWell}
+          instrumentControls={managedInstruments.find((i) => i.isMolecular)?.controls ?? []}
+          onCloseWell={() => setSelectedWell(null)}
           onBack={() => setScreen('home')}
           onWellClick={handleWellClick}
           onReleasePlate={handleReleasePlate}
+          onReleaseValidOnly={handleReleaseValidOnly}
           onReleaseSelected={handleReleaseSelected}
         />
       )}
@@ -233,6 +312,19 @@ function App() {
           reportOverride={reportResultsCache[selectedWaitingEntry.id] ?? null}
           onBack={() => setWaitingView('list')}
           onSelectEntry={setSelectedWaitingEntry}
+        />
+      )}
+      {activeNav === 'qc' && qcView === 'list' && (
+        <InstrumentManagementListPage
+          instruments={managedInstruments}
+          onSelectInstrument={handleSelectManagedInstrument}
+        />
+      )}
+      {activeNav === 'qc' && qcView === 'detail' && selectedManagedInstrument && (
+        <InstrumentDetailPage
+          instrument={selectedManagedInstrument}
+          onBack={handleManagedInstrumentBack}
+          onUpdateControls={(controls) => handleUpdateInstrumentControls(selectedManagedInstrument.id, controls)}
         />
       )}
 
@@ -261,14 +353,14 @@ function App() {
         onDataStartRowChange={handleDataStartRowChange}
       />
 
-      <WellDetailsDrawer well={selectedWell} onClose={() => setSelectedWell(null)} />
-
       <ReleaseConfirmationModal
         open={releaseModalOpen}
         onClose={() => setReleaseModalOpen(false)}
         onConfirm={handleConfirmRelease}
         mode={releaseMode}
         plateId={plateId}
+        validCount={releaseCounts.validCount}
+        totalCount={releaseCounts.totalCount}
       />
 
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}

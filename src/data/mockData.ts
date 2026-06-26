@@ -1,9 +1,38 @@
-import type { InstrumentCard, PreviewRow, SampleGroup, WellData } from '../types'
+import type { InstrumentCard, PreviewRow, SampleGroup, WellControlValidation, WellData, WellTargetRow } from '../types'
 
 export const UPLOADED_FILE = 'QS5_UTI_28OCT2024_MU1.xls'
 export const PLATE_ID = 'AB1P'
 export const DEVICE = 'QS5'
 export const RUN_DATE = '28 Oct 2024'
+
+const MOCK_CONTROL_VALIDATIONS: WellControlValidation[] = [
+  { control: 'PC', position: 'A10', status: 'Pass' },
+  { control: 'NC', position: 'A11', status: 'Pass' },
+  { control: 'NTC', position: 'A12', status: 'Pass' },
+]
+
+function makeTargetRows(ctValues: WellData['ctValues']): WellTargetRow[] {
+  return ctValues.map((cv) => ({
+    target: cv.target,
+    result: cv.ct,
+    interpretation: cv.interpretation,
+    status: 'Valid',
+  }))
+}
+
+function wellDefaults(overrides: Partial<WellData> = {}): Pick<
+  WellData,
+  'runDate' | 'accessionNumber' | 'qcStatus' | 'targetRows' | 'controlValidations'
+> {
+  return {
+    runDate: RUN_DATE,
+    accessionNumber: '',
+    qcStatus: 'QC Passed',
+    targetRows: [],
+    controlValidations: MOCK_CONTROL_VALIDATIONS,
+    ...overrides,
+  }
+}
 
 export const instruments: InstrumentCard[] = [
   {
@@ -80,17 +109,18 @@ export const sampleGroups: SampleGroup[] = [
     detectedOrganisms: 3,
     resistanceGenes: 4,
     controlsPassed: true,
+    sampleValid: true,
     selected: false,
     rows: [
-      { well: 'A1', plateId: 'AB1P', targetName: 'Escherichia coli', ctValue: 23, interpretation: 'Detected', type: 'Organism', resistantAntibiotics: '-', sensitiveAntibiotics: '-', status: 'Ready' },
-      { well: 'A2', plateId: 'AB1P', targetName: 'blaTEM', ctValue: 25, interpretation: 'Detected', type: 'Gene', resistantAntibiotics: 'Cefotaxime/Ceftriaxone', sensitiveAntibiotics: '-', status: 'Ready' },
-      { well: 'A3', plateId: 'AB1P', targetName: 'blaCTX-M', ctValue: 28, interpretation: 'Detected', type: 'Gene', resistantAntibiotics: 'Ceftazidime/Ceftriaxone', sensitiveAntibiotics: '-', status: 'Ready' },
-      { well: 'A4', plateId: 'AB1P', targetName: 'blaNDM-1', ctValue: 35, interpretation: 'Not Detected', type: 'Gene', resistantAntibiotics: '-', sensitiveAntibiotics: 'Meropenem', status: 'Ready' },
-      { well: 'A5', plateId: 'AB1P', targetName: 'Klebsiella pneumoniae', ctValue: 20, interpretation: 'Detected', type: 'Organism', resistantAntibiotics: '-', sensitiveAntibiotics: '-', status: 'Ready' },
-      { well: 'A6', plateId: 'AB1P', targetName: 'blaKPC', ctValue: 18, interpretation: 'Detected', type: 'Gene', resistantAntibiotics: 'Imipenem/Meropenem', sensitiveAntibiotics: '-', status: 'Ready' },
-      { well: 'A7', plateId: 'AB1P', targetName: 'blaVIM', ctValue: 35, interpretation: 'Not Detected', type: 'Gene', resistantAntibiotics: '-', sensitiveAntibiotics: 'Meropenem', status: 'Ready' },
-      { well: 'A8', plateId: 'AB1P', targetName: 'Enterococcus faecalis', ctValue: 22, interpretation: 'Detected', type: 'Organism', resistantAntibiotics: '-', sensitiveAntibiotics: '-', status: 'Ready' },
-      { well: 'A9', plateId: 'AB1P', targetName: 'vanA', ctValue: 21, interpretation: 'Detected', type: 'Gene', resistantAntibiotics: 'Vancomycin/Teicoplanin', sensitiveAntibiotics: '-', status: 'Ready' },
+      { well: 'A1', plateId: 'AB1P', targetName: 'Escherichia coli', ctValue: 23, interpretation: 'Detected', type: 'Organism', resistantAntibiotics: '-', sensitiveAntibiotics: '-', controlPassed: true, status: 'Ready' },
+      { well: 'A2', plateId: 'AB1P', targetName: 'blaTEM', ctValue: 25, interpretation: 'Detected', type: 'Gene', resistantAntibiotics: 'Cefotaxime/Ceftriaxone', sensitiveAntibiotics: '-', controlPassed: true, status: 'Ready' },
+      { well: 'A3', plateId: 'AB1P', targetName: 'blaCTX-M', ctValue: 28, interpretation: 'Detected', type: 'Gene', resistantAntibiotics: 'Ceftazidime/Ceftriaxone', sensitiveAntibiotics: '-', controlPassed: true, status: 'Ready' },
+      { well: 'A4', plateId: 'AB1P', targetName: 'blaNDM-1', ctValue: 35, interpretation: 'Not Detected', type: 'Gene', resistantAntibiotics: '-', sensitiveAntibiotics: 'Meropenem', controlPassed: true, status: 'Ready' },
+      { well: 'A5', plateId: 'AB1P', targetName: 'Klebsiella pneumoniae', ctValue: 20, interpretation: 'Detected', type: 'Organism', resistantAntibiotics: '-', sensitiveAntibiotics: '-', controlPassed: true, status: 'Ready' },
+      { well: 'A6', plateId: 'AB1P', targetName: 'blaKPC', ctValue: 18, interpretation: 'Detected', type: 'Gene', resistantAntibiotics: 'Imipenem/Meropenem', sensitiveAntibiotics: '-', controlPassed: true, status: 'Ready' },
+      { well: 'A7', plateId: 'AB1P', targetName: 'blaVIM', ctValue: 35, interpretation: 'Not Detected', type: 'Gene', resistantAntibiotics: '-', sensitiveAntibiotics: 'Meropenem', controlPassed: true, status: 'Ready' },
+      { well: 'A8', plateId: 'AB1P', targetName: 'Enterococcus faecalis', ctValue: 22, interpretation: 'Detected', type: 'Organism', resistantAntibiotics: '-', sensitiveAntibiotics: '-', controlPassed: true, status: 'Ready' },
+      { well: 'A9', plateId: 'AB1P', targetName: 'vanA', ctValue: 21, interpretation: 'Detected', type: 'Gene', resistantAntibiotics: 'Vancomycin/Teicoplanin', sensitiveAntibiotics: '-', controlPassed: true, status: 'Ready' },
     ],
   },
   {
@@ -102,9 +132,10 @@ export const sampleGroups: SampleGroup[] = [
     detectedOrganisms: 1,
     resistanceGenes: 0,
     controlsPassed: true,
+    sampleValid: true,
     selected: false,
     rows: [
-      { well: 'B2', plateId: 'AB1P', targetName: 'Escherichia coli', ctValue: 30, interpretation: 'Detected', type: 'Organism', resistantAntibiotics: '-', sensitiveAntibiotics: '-', status: 'Needs Review' },
+      { well: 'B2', plateId: 'AB1P', targetName: 'Escherichia coli', ctValue: 30, interpretation: 'Detected', type: 'Organism', resistantAntibiotics: '-', sensitiveAntibiotics: '-', controlPassed: true, status: 'Needs Review' },
     ],
   },
   {
@@ -116,13 +147,14 @@ export const sampleGroups: SampleGroup[] = [
     detectedOrganisms: 2,
     resistanceGenes: 3,
     controlsPassed: true,
+    sampleValid: true,
     selected: false,
     rows: [
-      { well: 'B3', plateId: 'AB1P', targetName: 'Escherichia coli', ctValue: 22, interpretation: 'Detected', type: 'Organism', resistantAntibiotics: '-', sensitiveAntibiotics: '-', status: 'Ready' },
-      { well: 'B3', plateId: 'AB1P', targetName: 'Proteus mirabilis', ctValue: 24, interpretation: 'Detected', type: 'Organism', resistantAntibiotics: '-', sensitiveAntibiotics: '-', status: 'Ready' },
-      { well: 'B3', plateId: 'AB1P', targetName: 'blaTEM', ctValue: 26, interpretation: 'Detected', type: 'Gene', resistantAntibiotics: 'Cefotaxime/Ceftriaxone', sensitiveAntibiotics: '-', status: 'Ready' },
-      { well: 'B3', plateId: 'AB1P', targetName: 'blaCTX-M', ctValue: 28, interpretation: 'Detected', type: 'Gene', resistantAntibiotics: 'Ceftazidime/Ceftriaxone', sensitiveAntibiotics: '-', status: 'Ready' },
-      { well: 'B3', plateId: 'AB1P', targetName: 'vanA', ctValue: 30, interpretation: 'Detected', type: 'Gene', resistantAntibiotics: 'Vancomycin/Teicoplanin', sensitiveAntibiotics: '-', status: 'Ready' },
+      { well: 'B3', plateId: 'AB1P', targetName: 'Escherichia coli', ctValue: 22, interpretation: 'Detected', type: 'Organism', resistantAntibiotics: '-', sensitiveAntibiotics: '-', controlPassed: true, status: 'Ready' },
+      { well: 'B3', plateId: 'AB1P', targetName: 'Proteus mirabilis', ctValue: 24, interpretation: 'Detected', type: 'Organism', resistantAntibiotics: '-', sensitiveAntibiotics: '-', controlPassed: true, status: 'Ready' },
+      { well: 'B3', plateId: 'AB1P', targetName: 'blaTEM', ctValue: 26, interpretation: 'Detected', type: 'Gene', resistantAntibiotics: 'Cefotaxime/Ceftriaxone', sensitiveAntibiotics: '-', controlPassed: true, status: 'Ready' },
+      { well: 'B3', plateId: 'AB1P', targetName: 'blaCTX-M', ctValue: 28, interpretation: 'Detected', type: 'Gene', resistantAntibiotics: 'Ceftazidime/Ceftriaxone', sensitiveAntibiotics: '-', controlPassed: true, status: 'Ready' },
+      { well: 'B3', plateId: 'AB1P', targetName: 'vanA', ctValue: 30, interpretation: 'Detected', type: 'Gene', resistantAntibiotics: 'Vancomycin/Teicoplanin', sensitiveAntibiotics: '-', controlPassed: true, status: 'Ready' },
     ],
   },
   {
@@ -135,9 +167,10 @@ export const sampleGroups: SampleGroup[] = [
     detectedOrganisms: 1,
     resistanceGenes: 0,
     controlsPassed: false,
+    sampleValid: false,
     selected: false,
     rows: [
-      { well: 'B1', plateId: 'AB1P', targetName: 'Klebsiella pneumoniae', ctValue: 20, interpretation: 'Detected', type: 'Organism', resistantAntibiotics: '-', sensitiveAntibiotics: '-', status: 'Failed' },
+      { well: 'B1', plateId: 'AB1P', targetName: 'Klebsiella pneumoniae', ctValue: 20, interpretation: 'Detected', type: 'Organism', resistantAntibiotics: '-', sensitiveAntibiotics: '-', controlPassed: false, status: 'Failed' },
     ],
   },
 ]
@@ -153,6 +186,20 @@ export const wellA1Details: WellData = {
   qcType: '',
   status: 'ready',
   label: '000727425',
+  ...wellDefaults({
+    accessionNumber: 'TO-727425',
+    targetRows: makeTargetRows([
+      { target: 'Escherichia coli', ct: 23, interpretation: 'Detected' },
+      { target: 'blaTEM', ct: 25, interpretation: 'Detected' },
+      { target: 'blaCTX-M', ct: 28, interpretation: 'Detected' },
+      { target: 'blaNDM-1', ct: 35, interpretation: 'Not Detected' },
+      { target: 'Klebsiella pneumoniae', ct: 20, interpretation: 'Detected' },
+      { target: 'blaKPC', ct: 18, interpretation: 'Detected' },
+      { target: 'blaVIM', ct: 35, interpretation: 'Not Detected' },
+      { target: 'Enterococcus faecalis', ct: 22, interpretation: 'Detected' },
+      { target: 'vanA', ct: 21, interpretation: 'Detected' },
+    ]),
+  }),
   totalTargetCount: 9,
   detectedCount: 7,
   notDetectedCount: 2,
@@ -199,6 +246,13 @@ export const wellB1Details: WellData = {
   qcType: '',
   status: 'failed',
   label: 'UNKNOWN123',
+  ...wellDefaults({
+    accessionNumber: 'TO-UNKNOWN',
+    qcStatus: 'QC Passed',
+    targetRows: makeTargetRows([
+      { target: 'Klebsiella pneumoniae', ct: 20, interpretation: 'Detected' },
+    ]),
+  }),
   detectedTargets: ['Klebsiella pneumoniae'],
   notDetectedTargets: [],
   ctValues: [
@@ -283,6 +337,15 @@ function sampleWell(
     qcType: '',
     status,
     label: sampleId,
+    ...wellDefaults({
+      accessionNumber: sampleId,
+      targetRows: makeTargetRows(ctValues ?? detectedTargets.map((t, i) => ({
+        target: t,
+        ct: 20 + i * 2,
+        interpretation: 'Detected' as const,
+      }))),
+      qcStatus: status === 'failed' ? 'QC Warning' : 'QC Passed',
+    }),
     totalTargetCount: detectedTargets.length + notDetectedTargets.length,
     detectedCount,
     notDetectedCount: notDetectedTargets.length,
@@ -300,6 +363,7 @@ function sampleWell(
 }
 
 function controlWell(sampleId: string, patient: string, target: string): WellSeed {
+  const ctValues = [{ target, ct: sampleId === 'NC' || sampleId === 'NTC' ? '-' : 22, interpretation: 'Passed' as const }]
   return {
     sampleId,
     patient,
@@ -309,12 +373,16 @@ function controlWell(sampleId: string, patient: string, target: string): WellSee
     qcType: sampleId,
     status: 'control',
     label: sampleId,
+    ...wellDefaults({
+      runDate: '',
+      targetRows: makeTargetRows(ctValues),
+    }),
     totalTargetCount: 1,
     detectedCount: 1,
     notDetectedCount: 0,
     detectedTargets: [target],
     notDetectedTargets: [],
-    ctValues: [{ target, ct: sampleId === 'NC' || sampleId === 'NTC' ? '-' : 22, interpretation: 'Passed' }],
+    ctValues,
     validationChecks: [],
     isFailed: false,
   }
@@ -401,6 +469,7 @@ function emptyWell(wellId: string): WellData {
     qcType: '',
     status: 'empty',
     label: '',
+    ...wellDefaults({ runDate: '', controlValidations: [] }),
     detectedTargets: [],
     notDetectedTargets: [],
     ctValues: [],

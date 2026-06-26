@@ -4,7 +4,7 @@ import { loadLisRegistry } from '../data/lisSampleRegistry'
 import { normalizeAmpStatusCell, parseInterpretation } from './interpretation'
 import { isControlRecord, isQcFlag, parseQcType } from './qcDetection'
 import { combineRowCol, normalizeWell } from './wellPosition'
-import type { FieldMapping, FileParseContext, Interpretation, MappingTargetKey, ParsedUploadData, PlateSize, TargetType, UserFieldMapping } from '../types'
+import type { FieldMapping, FileParseContext, InstrumentControlConfig, Interpretation, MappingTargetKey, ParsedUploadData, PlateSize, TargetType, UserFieldMapping } from '../types'
 
 export interface RawMolecularRow {
   well: string
@@ -18,9 +18,15 @@ export interface RawMolecularRow {
   ct: string | number
   viralLoad: string
   interpretation: Interpretation
+  interpretationValue?: string
   ampStatus: string
   type: TargetType
   plateId?: string
+  accessionNumber?: string
+  ampScore?: string
+  cqConfidence?: string
+  reporterDye?: string
+  thresholdValue?: string
 }
 
 export const MAPPING_FIELD_DEFS: { key: MappingTargetKey; label: string; required: boolean }[] = [
@@ -28,7 +34,8 @@ export const MAPPING_FIELD_DEFS: { key: MappingTargetKey; label: string; require
   { key: 'sampleId', label: 'Sample ID', required: true },
   { key: 'target', label: 'Target Name', required: true },
   { key: 'result', label: 'Result', required: true },
-  { key: 'interpretation', label: 'Interpretation / Amp Status', required: false },
+  { key: 'interpretation', label: 'Interpretation', required: false },
+  { key: 'ampStatus', label: 'Amp Status', required: false },
   { key: 'viralLoad', label: 'Viral Load', required: false },
   { key: 'plateId', label: 'Plate ID', required: false },
 ]
@@ -39,15 +46,27 @@ const COLUMN_ALIASES: Record<MappingTargetKey, string[]> = {
   target: ['target', 'target name', 'parameter', 'gene', 'organism', 'analyte', 'target_name', 'assay', 'pathogen', 'target/gene'],
   result: ['result', 'ct', 'ct value', 'cq', 'ct_value', 'ct (drn)', 'cq value', 'threshold cycle', 'result 1', 'result_1'],
   interpretation: [
+    'interpretation', 'call', 'result interpretation', 'qualitative', 'detection call',
+    'detected', 'detection status', 'result call',
+  ],
+  ampStatus: [
     'amp status', 'ampstatus', 'amp status result', 'amplification status', 'amp result',
-    'amplification result', 'interpretation', 'call', 'result interpretation', 'qualitative',
-    'amp call', 'detected', 'detection status', 'amp st', 'amp.',
+    'amplification result', 'amp call', 'amp st', 'amp.',
   ],
   viralLoad: ['viral load', 'viralload', 'vl', 'copies', 'copies/ml', 'iu/ml', 'log copies'],
   plateId: ['plate', 'plate id', 'plate_id', 'plateid'],
 }
 
 type AutoColumnKey = 'testOrder' | 'isQc' | 'qcType' | 'type' | 'patient' | 'panel'
+type OptionalMetricKey = 'accessionNumber' | 'ampScore' | 'cqConfidence' | 'reporterDye' | 'thresholdValue'
+
+const OPTIONAL_METRIC_ALIASES: Record<OptionalMetricKey, string[]> = {
+  accessionNumber: ['accession number', 'accession no', 'accession #', 'accession id', 'accession'],
+  ampScore: ['amp score', 'amplification score', 'amp_score'],
+  cqConfidence: ['cq confidence', 'ct confidence', 'confidence', 'cq conf'],
+  reporterDye: ['reporter dye', 'reporter', 'fluorophore', 'dye'],
+  thresholdValue: ['threshold value', 'threshold', 'auto threshold'],
+}
 
 const AUTO_COLUMN_ALIASES: Record<AutoColumnKey, string[]> = {
   testOrder: ['test order', 'test order id', 'test order no', 'test order number', 'order id', 'order number', 'order no', 'accession order', 'accession no', 'accession number', 'lab order', 'lab order id', 'bill id', 'test id'],
@@ -151,7 +170,14 @@ function autoDetectSourceColumn(
 }
 
 function findAutoColumnIndex(headers: string[], key: AutoColumnKey, excludeIndices: Set<number> = new Set()): number {
-  const aliases = AUTO_COLUMN_ALIASES[key]
+  const idx = findColumnByAliases(headers, AUTO_COLUMN_ALIASES[key], excludeIndices)
+  if (idx < 0 && key === 'qcType') {
+    return headers.findIndex((h, i) => !excludeIndices.has(i) && h === 'qc')
+  }
+  return idx
+}
+
+function findColumnByAliases(headers: string[], aliases: string[], excludeIndices: Set<number> = new Set()): number {
   let idx = headers.findIndex((h, i) => !excludeIndices.has(i) && aliases.some((a) => h === a))
   if (idx < 0) {
     idx = headers.findIndex((h, i) => {
@@ -162,10 +188,14 @@ function findAutoColumnIndex(headers: string[], key: AutoColumnKey, excludeIndic
       })
     })
   }
-  if (idx < 0 && key === 'qcType') {
-    idx = headers.findIndex((h, i) => !excludeIndices.has(i) && h === 'qc')
-  }
   return idx
+}
+
+function readOptionalMetric(row: unknown[], idx: number | undefined): string {
+  if (idx == null || idx < 0) return ''
+  const value = row[idx]
+  if (value == null || value === '') return ''
+  return String(value).trim()
 }
 
 export function createAutoMappings(headers: string[], sourceColumns: string[]): UserFieldMapping[] {
@@ -176,6 +206,48 @@ export function createAutoMappings(headers: string[], sourceColumns: string[]): 
     required: def.required,
     sourceColumn: autoDetectSourceColumn(def.key, headers, sourceColumns, usedIndices),
   }))
+}
+
+export function mappingsNeedSync(mappings: UserFieldMapping[]): boolean {
+  if (mappings.length !== MAPPING_FIELD_DEFS.length) return true
+  const byKey = new Map(mappings.map((mapping) => [mapping.key, mapping]))
+  return MAPPING_FIELD_DEFS.some((def) => {
+    const existing = byKey.get(def.key)
+    return !existing || existing.label !== def.label || existing.required !== def.required
+  })
+}
+
+export function syncUserMappingsWithFieldDefs(mappings: UserFieldMapping[]): UserFieldMapping[] {
+  const byKey = new Map(mappings.map((mapping) => [mapping.key, mapping]))
+
+  // Before ampStatus existed, interpretation carried the Amp Status column mapping.
+  if (!byKey.has('ampStatus') && byKey.has('interpretation')) {
+    const legacyInterpretation = byKey.get('interpretation')!
+    if (legacyInterpretation.sourceColumn) {
+      byKey.set('ampStatus', {
+        key: 'ampStatus',
+        label: 'Amp Status',
+        required: false,
+        sourceColumn: legacyInterpretation.sourceColumn,
+      })
+      byKey.set('interpretation', {
+        key: 'interpretation',
+        label: 'Interpretation',
+        required: false,
+        sourceColumn: '',
+      })
+    }
+  }
+
+  return MAPPING_FIELD_DEFS.map((def) => {
+    const existing = byKey.get(def.key)
+    return {
+      key: def.key,
+      label: def.label,
+      required: def.required,
+      sourceColumn: existing?.sourceColumn ?? '',
+    }
+  })
 }
 
 function detectHeaderRow(rows: unknown[][]): number {
@@ -332,7 +404,20 @@ function resolveInterpretationColumnIndex(
   headers: string[],
 ): number {
   if (mappedIdx >= 0) return mappedIdx
-  const patterns = ['amp status', 'ampstatus', 'amp st', 'amplification status', 'detection status', 'interpretation']
+  const patterns = ['interpretation', 'call', 'result interpretation', 'qualitative', 'detection call']
+  for (const pattern of patterns) {
+    const idx = headers.findIndex((h) => h === pattern || h.includes(pattern))
+    if (idx >= 0) return idx
+  }
+  return -1
+}
+
+function resolveAmpStatusColumnIndex(
+  mappedIdx: number,
+  headers: string[],
+): number {
+  if (mappedIdx >= 0) return mappedIdx
+  const patterns = ['amp status', 'ampstatus', 'amp st', 'amplification status', 'amp result']
   for (const pattern of patterns) {
     const idx = headers.findIndex((h) => h === pattern || h.includes(pattern))
     if (idx >= 0) return idx
@@ -354,14 +439,18 @@ export function recordsFromMappings(
   const targetIdx = getColumnIndex(userMappings, 'target', headers, sourceColumns)
   const resultIdx = getColumnIndex(userMappings, 'result', headers, sourceColumns)
   const viralLoadIdx = getColumnIndex(userMappings, 'viralLoad', headers, sourceColumns)
-  const interpIdx = resolveInterpretationColumnIndex(
+  const interpretationIdx = resolveInterpretationColumnIndex(
     getColumnIndex(userMappings, 'interpretation', headers, sourceColumns),
+    headers,
+  )
+  const ampStatusIdx = resolveAmpStatusColumnIndex(
+    getColumnIndex(userMappings, 'ampStatus', headers, sourceColumns),
     headers,
   )
   const plateIdx = getColumnIndex(userMappings, 'plateId', headers, sourceColumns)
 
   const autoExclude = new Set(
-    [wellIdx, sampleIdx, targetIdx, resultIdx, viralLoadIdx, interpIdx, plateIdx].filter((i) => i >= 0),
+    [wellIdx, sampleIdx, targetIdx, resultIdx, viralLoadIdx, interpretationIdx, ampStatusIdx, plateIdx].filter((i) => i >= 0),
   )
   const patientIdx = findAutoColumnIndex(headers, 'patient', autoExclude)
   if (patientIdx >= 0) autoExclude.add(patientIdx)
@@ -374,6 +463,14 @@ export function recordsFromMappings(
   const qcTypeIdx = findAutoColumnIndex(headers, 'qcType', autoExclude)
   if (qcTypeIdx >= 0) autoExclude.add(qcTypeIdx)
   const typeIdx = findAutoColumnIndex(headers, 'type', autoExclude)
+  const metricIdx: Partial<Record<OptionalMetricKey, number>> = {}
+  for (const key of Object.keys(OPTIONAL_METRIC_ALIASES) as OptionalMetricKey[]) {
+    const idx = findColumnByAliases(headers, OPTIONAL_METRIC_ALIASES[key], autoExclude)
+    if (idx >= 0) {
+      metricIdx[key] = idx
+      autoExclude.add(idx)
+    }
+  }
   const rowIdx = headers.findIndex((h) => ['row', 'plate row'].includes(h))
   const colIdx = headers.findIndex((h) => ['col', 'column', 'plate column'].includes(h))
 
@@ -424,11 +521,14 @@ export function recordsFromMappings(
     const ctRaw = row[resultIdx]
     const ct = ctRaw === '' || ctRaw == null ? '-' : (typeof ctRaw === 'number' ? ctRaw : String(ctRaw).trim())
     const viralLoad = viralLoadIdx >= 0 ? String(row[viralLoadIdx] ?? '').trim() : ''
-    const interpRaw = interpIdx >= 0 ? normalizeAmpStatusCell(row[interpIdx]) : ''
+    const interpretationColRaw = interpretationIdx >= 0 ? normalizeAmpStatusCell(row[interpretationIdx]) : ''
+    const ampStatusColRaw = ampStatusIdx >= 0 ? normalizeAmpStatusCell(row[ampStatusIdx]) : ''
+    const ampStatus = ampStatusColRaw.trim()
     const typeRaw = typeIdx >= 0 ? String(row[typeIdx] ?? '') : ''
     const plateId = plateIdx >= 0
       ? String(row[plateIdx] ?? '').trim() || context.metadata.plateId
       : context.metadata.plateId
+    const accessionNumber = readOptionalMetric(row, metricIdx.accessionNumber) || testOrder
 
     records.push({
       well,
@@ -441,10 +541,16 @@ export function recordsFromMappings(
       target,
       ct,
       viralLoad,
-      ampStatus: interpRaw.trim(),
-      interpretation: parseInterpretation(interpRaw, ct, { isQc }),
+      ampStatus,
+      interpretationValue: interpretationColRaw || undefined,
+      interpretation: parseInterpretation(interpretationColRaw || ampStatusColRaw, ct, { isQc }),
       type: isQc ? 'Control' : inferType(target, typeRaw),
       plateId,
+      accessionNumber: isQc ? '' : accessionNumber,
+      ampScore: readOptionalMetric(row, metricIdx.ampScore) || undefined,
+      cqConfidence: readOptionalMetric(row, metricIdx.cqConfidence) || undefined,
+      reporterDye: readOptionalMetric(row, metricIdx.reporterDye) || undefined,
+      thresholdValue: readOptionalMetric(row, metricIdx.thresholdValue) || undefined,
     })
   }
   return propagateWellControlContext(records)
@@ -480,7 +586,6 @@ function propagateWellControlContext(records: RawMolecularRow[]): RawMolecularRo
         qcType: isQc ? qcType : '',
         isQc,
         panel: row.panel || sharedPanel,
-        interpretation: parseInterpretation(row.ampStatus, row.ct, { isQc }),
       })
     }
   }
@@ -508,16 +613,17 @@ export function resolvePlateId(
 export async function buildUploadDataFromContext(
   context: FileParseContext,
   userMappings: UserFieldMapping[],
-  options?: { plateIdOverride?: string; plateSize?: PlateSize },
+  options?: { plateIdOverride?: string; plateSize?: PlateSize; instrumentControls?: InstrumentControlConfig[] },
 ): Promise<ParsedUploadData> {
   await loadLisRegistry()
-  let records = recordsFromMappings(context, userMappings)
+  const mappings = syncUserMappingsWithFieldDefs(userMappings)
+  let records = recordsFromMappings(context, mappings)
   if (records.length === 0) {
     throw new Error('No result rows found. Check field mappings and file data.')
   }
 
-  const plateId = resolvePlateId(context, records, userMappings, options?.plateIdOverride)
-  const plateColumnMapped = userMappings.some((m) => m.key === 'plateId' && m.sourceColumn)
+  const plateId = resolvePlateId(context, records, mappings, options?.plateIdOverride)
+  const plateColumnMapped = mappings.some((m) => m.key === 'plateId' && m.sourceColumn)
   if (options?.plateIdOverride?.trim() || !plateColumnMapped) {
     records = records.map((r) => ({ ...r, plateId }))
   }
@@ -525,13 +631,14 @@ export async function buildUploadDataFromContext(
   return buildValidationData({
     fileName: context.fileName,
     rawText: context.rawText,
-    fieldMappings: mappingsToFieldMappings(userMappings),
+    fieldMappings: mappingsToFieldMappings(mappings),
     records,
     device: context.metadata.device,
     plateId,
     runDate: context.metadata.runDate,
     defaultPanel: context.metadata.defaultPanel,
     plateSize: options?.plateSize ?? 96,
+    instrumentControls: options?.instrumentControls,
   })
 }
 

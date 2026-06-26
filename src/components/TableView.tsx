@@ -114,11 +114,15 @@ export function TableView({ groups, plateWells, onWellOpen, searchQuery }: Table
                 <span className="text-[10px] bg-white border border-slate-200 px-1.5 py-0.5 rounded text-slate-600">
                   Detected Targets: {group.detectedOrganisms}
                 </span>
-                {group.controlsPassed && (
-                  <span className="text-[10px] bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded text-emerald-700">
-                    Controls Passed
-                  </span>
-                )}
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded border ${
+                    group.sampleValid
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                      : 'bg-red-50 border-red-200 text-red-700'
+                  }`}
+                >
+                  {group.sampleValid ? 'Sample Valid' : 'Sample Invalid'}
+                </span>
               </div>
             </div>
             <div className="flex gap-1.5 shrink-0">
@@ -146,8 +150,7 @@ export function TableView({ groups, plateWells, onWellOpen, searchQuery }: Table
                     <th className="px-2 py-1.5 text-left font-medium">Result</th>
                     <th className="px-2 py-1.5 text-left font-medium">Interpretation</th>
                     <th className="px-2 py-1.5 text-left font-medium">Type</th>
-                    <th className="px-2 py-1.5 text-left font-medium">Resistant Antibiotics</th>
-                    <th className="px-2 py-1.5 text-left font-medium">Sensitive Antibiotics</th>
+                    <th className="px-2 py-1.5 text-left font-medium">Amp Status</th>
                     <th className="px-2 py-1.5 text-left font-medium">Control Status</th>
                     <th className="px-2 py-1.5 text-left font-medium">Action</th>
                   </tr>
@@ -184,11 +187,10 @@ export function TableView({ groups, plateWells, onWellOpen, searchQuery }: Table
                         </span>
                       </td>
                       <td className="px-2 py-1.5 text-slate-600">{row.type}</td>
-                      <td className="px-2 py-1.5 text-slate-600">{row.resistantAntibiotics}</td>
-                      <td className="px-2 py-1.5 text-slate-600">{row.sensitiveAntibiotics}</td>
+                      <td className="px-2 py-1.5 text-slate-600">{row.ampStatus?.trim() || '—'}</td>
                       <td className="px-2 py-1.5">
-                        <Badge variant={controlStatusVariant(group.controlsPassed)}>
-                          {group.controlsPassed ? 'Passed' : 'Failed'}
+                        <Badge variant={controlStatusVariant(row.controlPassed)}>
+                          {row.controlPassed ? 'Passed' : 'Failed'}
                         </Badge>
                       </td>
                       <td className="px-2 py-1.5">

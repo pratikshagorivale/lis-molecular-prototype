@@ -6,21 +6,25 @@ interface DrawerProps {
   title: string
   children: React.ReactNode
   footer?: React.ReactNode
+  /** When false, the page behind the drawer stays interactive (e.g. plate well selection). */
+  modal?: boolean
 }
 
-export function Drawer({ open, onClose, title, children, footer }: DrawerProps) {
+export function Drawer({ open, onClose, title, children, footer, modal = true }: DrawerProps) {
   useEffect(() => {
-    if (open) document.body.style.overflow = 'hidden'
+    if (open && modal) document.body.style.overflow = 'hidden'
     else document.body.style.overflow = ''
     return () => { document.body.style.overflow = '' }
-  }, [open])
+  }, [open, modal])
 
   return (
     <>
-      <div
-        className={`fixed inset-0 bg-black/30 z-40 transition-opacity ${open ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-        onClick={onClose}
-      />
+      {modal && (
+        <div
+          className={`fixed inset-0 bg-black/30 z-40 transition-opacity ${open ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+          onClick={onClose}
+        />
+      )}
       <div
         className={`fixed top-0 right-0 h-full w-[420px] bg-white shadow-2xl z-50 flex flex-col transition-transform duration-200 ${open ? 'translate-x-0' : 'translate-x-full pointer-events-none'}`}
       >

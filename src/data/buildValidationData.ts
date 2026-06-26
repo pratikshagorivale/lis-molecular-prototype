@@ -1,11 +1,12 @@
 import { isUnknownSample, lookupSample } from './lisSampleRegistry'
 import { isPositiveResult, parseInterpretation } from '../utils/interpretation'
-import { controlLabel, evaluatePlateQc, isControlRecord } from '../utils/qcDetection'
+import { controlLabel, evaluatePlateQc, getPlateControlValidations, isControlRecord, isPlateControlWell, type PlateQcEvaluation } from '../utils/qcDetection'
 import { isValidPlateWell, normalizeWell } from '../utils/wellPosition'
 import type { RawMolecularRow } from '../utils/parseMolecularFile'
 import type {
   ActivityLogEntry,
   FieldMapping,
+  InstrumentControlConfig,
   ParsedUploadData,
   PlateSummary,
   PreviewRow,
@@ -15,10 +16,20 @@ import type {
   SampleStatus,
   ValidationStatus,
   ValidationSummary,
+  WellAdditionalMetrics,
+  WellControlValidation,
   WellData,
+  WellQcStatus,
   WellStatus,
+  WellTargetRow,
   PlateSize,
 } from '../types'
+import { AVAILABLE_TARGETS } from './instrumentManagementMockData'
+import {
+  computeAffectedTargetsFromFailedTargetedControls,
+  normalizeTargetName,
+  wellTestsAffectedTarget,
+} from '../utils/targetedControlImpact'
 
 const ROWS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 const COLS = Array.from({ length: 12 }, (_, i) => i + 1)
@@ -42,6 +53,7 @@ interface BuildInput {
   runDate: string
   defaultPanel: string
   plateSize?: PlateSize
+  instrumentControls?: InstrumentControlConfig[]
 }
 
 function nowTime(): string {
@@ -78,12 +90,43 @@ function wellStatusForRow(row: RawMolecularRow): WellStatus {
   return 'review'
 }
 
+function mapWellQcStatus(status: PlateQcEvaluation['status']): WellQcStatus {
+  if (status === 'QC Passed') return 'QC Passed'
+  if (status === 'Failed') return 'QC Failed'
+  return 'QC Warning'
+}
+
+function buildControlValidations(records: RawMolecularRow[]): WellControlValidation[] {
+  return getPlateControlValidations(records)
+}
+
+function buildAdditionalMetricsFromRow(row: RawMolecularRow): WellAdditionalMetrics | undefined {
+  const metrics: WellAdditionalMetrics = {}
+  if (row.ampStatus) metrics.ampStatus = row.ampStatus
+  if (row.ampScore) metrics.ampScore = row.ampScore
+  if (row.cqConfidence) metrics.cqConfidence = row.cqConfidence
+  if (row.reporterDye) metrics.reporterDye = row.reporterDye
+  if (row.thresholdValue) metrics.thresholdValue = row.thresholdValue
+  return Object.keys(metrics).length > 0 ? metrics : undefined
+}
+
+function buildTargetRows(records: RawMolecularRow[], isDuplicateWell: boolean): WellTargetRow[] {
+  return records.map((r) => ({
+    target: r.target,
+    result: r.ct,
+    interpretation: r.interpretation,
+    status: rowValidationStatus(r, isDuplicateWell),
+    additionalMetrics: buildAdditionalMetricsFromRow(r),
+  }))
+}
+
 function buildPlateWellsFromRecords(
   records: RawMolecularRow[],
   plateId: string,
   defaultPanel: string,
+  runDate: string,
   failedControlWellIds: Set<string> = new Set(),
-  qcPassed = true,
+  plateQc: PlateQcEvaluation,
 ): WellData[] {
   const byWell = new Map<string, RawMolecularRow[]>()
   const unmappedBySample = new Map<string, RawMolecularRow[]>()
@@ -115,6 +158,16 @@ function buildPlateWellsFromRecords(
     }
   }
 
+  const controlValidations = buildControlValidations(records)
+  const qcStatus = mapWellQcStatus(plateQc.status)
+  const wellSampleDup = new Map<string, Set<string>>()
+  for (const r of records) {
+    if (isControlRecord(r)) continue
+    const set = wellSampleDup.get(r.well) ?? new Set()
+    set.add(r.sampleId)
+    wellSampleDup.set(r.well, set)
+  }
+
   const wells: WellData[] = []
   for (const row of ROWS) {
     for (const col of COLS) {
@@ -125,7 +178,9 @@ function buildPlateWellsFromRecords(
         wells.push({
           wellId,
           plateId,
+          runDate: '',
           sampleId: '',
+          accessionNumber: '',
           patient: '',
           testOrder: '',
           panel: '',
@@ -133,8 +188,11 @@ function buildPlateWellsFromRecords(
           qcType: '',
           status: 'empty',
           label: '',
+          qcStatus,
           detectedTargets: [],
           notDetectedTargets: [],
+          targetRows: [],
+          controlValidations,
           ctValues: [],
           validationChecks: [],
           isFailed: false,
@@ -172,10 +230,20 @@ function buildPlateWellsFromRecords(
       const testOrder = isControl ? '' : (first.testOrder || '')
       const panel = isControl ? 'Control' : (first.panel || lis?.panel || defaultPanel)
 
+      const isDuplicateWell = (wellSampleDup.get(wellId)?.size ?? 0) > 1
+      const targetRows = buildTargetRows(targetRecords, isDuplicateWell)
+      const accessionNumber = isControl ? '' : (first.accessionNumber || first.testOrder || '')
+      const controlWellFailed = isControl && failedControlWellIds.has(wellId)
+      const wellQcStatus: WellQcStatus = isControl
+        ? (controlWellFailed ? 'QC Failed' : 'QC Passed')
+        : qcStatus
+
       wells.push({
         wellId,
         plateId,
+        runDate: isControl ? '' : runDate,
         sampleId: first.sampleId,
+        accessionNumber,
         patient,
         testOrder,
         panel,
@@ -183,27 +251,39 @@ function buildPlateWellsFromRecords(
         qcType: first.qcType,
         status,
         label: isControl ? (first.sampleId.trim() || controlLabel(first)) : first.sampleId,
+        qcStatus: wellQcStatus,
         totalTargetCount,
         detectedCount,
         notDetectedCount,
         detectedTargets: detected.map((r) => r.target),
         notDetectedTargets: notDetected.map((r) => r.target),
+        targetRows,
+        controlValidations,
         ctValues,
         validationChecks: isControl ? [] : [
           { label: 'Sample Found', passed: !!lis || !!first.patient },
           { label: 'Ordered Test Found', passed: !!lis || !!first.testOrder },
           { label: 'Report Found', passed: !!lis || (!!first.patient && !!first.testOrder) },
           { label: 'Target Mapped', passed: true },
-          { label: 'Controls Passed', passed: status !== 'failed' },
+          { label: 'Controls Passed', passed: plateQc.qcPassed },
         ],
         validationErrors: validationErrors.length ? validationErrors : undefined,
-        isFailed: status === 'failed' || (isControl && failedControlWellIds.has(wellId)),
-        controlFailed: isControl && failedControlWellIds.has(wellId),
-        controlsPassed: isControl ? !failedControlWellIds.has(wellId) : qcPassed,
+        isFailed: status === 'failed' || controlWellFailed,
+        controlFailed: controlWellFailed,
+        controlsPassed: isControl ? !controlWellFailed : plateQc.qcPassed,
       })
     }
   }
   return wells
+}
+
+function targetControlPassed(
+  targetName: string,
+  plateQcPassed: boolean,
+  affectedTargets: Set<string>,
+): boolean {
+  if (!plateQcPassed) return false
+  return !affectedTargets.has(normalizeTargetName(targetName))
 }
 
 function buildSampleGroups(
@@ -211,6 +291,7 @@ function buildSampleGroups(
   plateId: string,
   defaultPanel: string,
   qcPassed: boolean,
+  affectedTargets: Set<string>,
 ): SampleGroup[] {
   const bySample = new Map<string, RawMolecularRow[]>()
   for (const r of records) {
@@ -228,6 +309,7 @@ function buildSampleGroups(
     const genes = rows.filter((r) => r.type === 'Gene' && isPositiveResult(r.interpretation, r.ampStatus, r.ct)).length
     const resultRows: ResultRow[] = rows.map((r) => {
       const abx = GENE_ABX[r.target] ?? {}
+      const controlPassed = targetControlPassed(r.target, qcPassed, affectedTargets)
       return {
         well: r.well,
         plateId,
@@ -239,6 +321,7 @@ function buildSampleGroups(
         resistantAntibiotics: abx.resistant ?? '-',
         sensitiveAntibiotics: abx.sensitive ?? '-',
         status: status === 'Ready for Release' ? 'Ready' : status,
+        controlPassed,
       }
     })
 
@@ -252,6 +335,7 @@ function buildSampleGroups(
       detectedOrganisms: organisms,
       resistanceGenes: genes,
       controlsPassed: qcPassed,
+      sampleValid: resultRows.length > 0 && resultRows.every((row) => row.controlPassed),
       selected: false,
       rows: resultRows,
     }
@@ -268,6 +352,7 @@ function buildSummaries(
   device: string,
   runDate: string,
   plateSize: PlateSize = 96,
+  plateQc: PlateQcEvaluation = evaluatePlateQc(records),
 ): { plateSummary: PlateSummary; validationSummary: ValidationSummary; qcBanner: QcBanner } {
   const sampleRecords = records.filter((r) => !isControlRecord(r))
   const controlRecords = records.filter((r) => isControlRecord(r))
@@ -289,8 +374,6 @@ function buildSummaries(
     if (existing && existing !== r.sampleId) duplicateWells++
     else wellToSample.set(r.well, r.sampleId)
   }
-
-  const plateQc = evaluatePlateQc(records)
 
   const errors = unknowns.length
   const missingControls = [plateQc.pc, plateQc.nc].filter((t) => !t.present).length
@@ -328,7 +411,18 @@ function buildSummaries(
 }
 
 export function buildValidationData(input: BuildInput): ParsedUploadData {
-  const { records, fileName, rawText, fieldMappings, device, plateId, runDate, defaultPanel, plateSize = 96 } = input
+  const {
+    records,
+    fileName,
+    rawText,
+    fieldMappings,
+    device,
+    plateId,
+    runDate,
+    defaultPanel,
+    plateSize = 96,
+    instrumentControls = [],
+  } = input
 
   const wellSampleDup = new Map<string, Set<string>>()
   for (const r of records) {
@@ -350,16 +444,48 @@ export function buildValidationData(input: BuildInput): ParsedUploadData {
     ctValue: r.ct,
     viralLoad: r.viralLoad ?? '',
     interpretation: r.interpretation,
+    interpretationValue: r.interpretationValue,
     ampStatus: r.ampStatus,
     type: isControlRecord(r) ? 'Control' : r.type,
     validationStatus: rowValidationStatus(r, (wellSampleDup.get(r.well)?.size ?? 0) > 1),
     selected: rowValidationStatus(r, false) === 'Valid',
   }))
 
-  const { plateSummary, validationSummary, qcBanner } = buildSummaries(records, plateId, device, runDate, plateSize)
-  const sampleGroups = buildSampleGroups(records, plateId, defaultPanel, qcBanner.qcPassed)
+  const plateQc = evaluatePlateQc(records)
+  const { plateSummary, validationSummary, qcBanner } = buildSummaries(records, plateId, device, runDate, plateSize, plateQc)
   const failedControlWellIds = new Set(qcBanner.failedControlWells.map((f) => f.wellId))
-  const plateWells = buildPlateWellsFromRecords(records, plateId, defaultPanel, failedControlWellIds, qcBanner.qcPassed)
+  const affectedTargets = computeAffectedTargetsFromFailedTargetedControls(
+    records,
+    qcBanner.failedControlWells,
+    instrumentControls,
+    AVAILABLE_TARGETS,
+  )
+  const sampleGroups = buildSampleGroups(records, plateId, defaultPanel, qcBanner.qcPassed, affectedTargets)
+  const plateWells = buildPlateWellsFromRecords(
+    records,
+    plateId,
+    defaultPanel,
+    runDate,
+    failedControlWellIds,
+    plateQc,
+  ).map((well) => {
+    const affected = wellTestsAffectedTarget(well, affectedTargets)
+    let qcStatus = well.qcStatus
+
+    if (isPlateControlWell(well)) {
+      qcStatus = well.controlFailed ? 'QC Failed' : 'QC Passed'
+    } else if (affected) {
+      qcStatus = 'QC Failed'
+    } else if (well.qcStatus === 'QC Failed') {
+      qcStatus = 'QC Passed'
+    }
+
+    return {
+      ...well,
+      affectedByTargetedControlFailure: affected,
+      qcStatus,
+    }
+  })
 
   const readyCount = sampleGroups.filter((g) => g.status === 'Ready for Release').length
   const reviewCount = sampleGroups.filter((g) => g.status === 'Needs Review').length

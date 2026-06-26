@@ -7,6 +7,7 @@ export const PLATE_SIZE_OPTIONS: { value: PlateSize; label: string }[] = [
 ]
 
 export type ValidationStatus = 'Valid' | 'Error' | 'Warning'
+export type WellQcStatus = 'QC Passed' | 'QC Warning' | 'QC Failed'
 export type SampleStatus = 'Ready' | 'Ready for Release' | 'Failed' | 'Needs Review'
 export type WellStatus = 'ready' | 'review' | 'failed' | 'control' | 'empty'
 export type Interpretation = 'Detected' | 'Not Detected' | 'Passed'
@@ -25,6 +26,7 @@ export interface PreviewRow {
   ctValue: number | string
   viralLoad: string
   interpretation: Interpretation
+  interpretationValue?: string
   ampStatus?: string
   type: TargetType
   validationStatus: ValidationStatus
@@ -42,6 +44,7 @@ export interface ResultRow {
   resistantAntibiotics: string
   sensitiveAntibiotics: string
   status: SampleStatus
+  controlPassed: boolean
 }
 
 export interface SampleGroup {
@@ -54,14 +57,39 @@ export interface SampleGroup {
   detectedOrganisms: number
   resistanceGenes: number
   controlsPassed: boolean
+  sampleValid: boolean
   rows: ResultRow[]
   selected: boolean
+}
+
+export interface WellTargetRow {
+  target: string
+  result: number | string
+  interpretation: Interpretation
+  status: ValidationStatus
+  additionalMetrics?: WellAdditionalMetrics
+}
+
+export interface WellControlValidation {
+  control: string
+  position: string
+  status: 'Pass' | 'Fail'
+}
+
+export interface WellAdditionalMetrics {
+  ampStatus?: string
+  ampScore?: string
+  cqConfidence?: string
+  reporterDye?: string
+  thresholdValue?: string
 }
 
 export interface WellData {
   wellId: string
   plateId: string
+  runDate: string
   sampleId: string
+  accessionNumber: string
   patient: string
   testOrder: string
   panel: string
@@ -69,17 +97,21 @@ export interface WellData {
   qcType: string
   status: WellStatus
   label: string
+  qcStatus: WellQcStatus
   totalTargetCount?: number
   detectedCount?: number
   notDetectedCount?: number
   detectedTargets: string[]
   notDetectedTargets: string[]
+  targetRows: WellTargetRow[]
+  controlValidations: WellControlValidation[]
   ctValues: { target: string; ct: number | string; interpretation: Interpretation; ampStatus?: string }[]
   validationChecks: { label: string; passed: boolean }[]
   validationErrors?: string[]
   isFailed: boolean
   controlFailed?: boolean
   controlsPassed?: boolean
+  affectedByTargetedControlFailure?: boolean
 }
 
 export interface FailedControlWell {
@@ -115,6 +147,7 @@ export type MappingTargetKey =
   | 'target'
   | 'result'
   | 'interpretation'
+  | 'ampStatus'
   | 'viralLoad'
   | 'plateId'
 
@@ -193,7 +226,69 @@ export interface ParsedUploadData {
 
 export type Screen = 'home' | 'validation'
 
+export type QcView = 'list' | 'detail'
+
 export type AppNav = 'home' | 'device-validation' | 'waiting' | 'critical' | 'archives' | 'inventory' | 'tat' | 'qc'
+
+export type InstrumentConnectionStatus = 'Connected' | 'Disconnected'
+
+export type InstrumentDetailTab = 'tests' | 'organism' | 'genes' | 'unmapped-keys' | 'reagent' | 'controls'
+
+export type ControlTypeOption =
+  | 'Positive Control'
+  | 'Negative Control'
+  | 'NTC'
+  | 'Internal Control'
+  | 'Extraction Control'
+
+export type ControlScope = 'plate' | 'targeted'
+
+export type AmpStatusOption = 'Detected' | 'Not Detected' | 'Inconclusive'
+
+export type PlateFailureBehavior = 'fail-plate' | 'warning-only'
+
+export type TargetedFailureBehavior = 'fail-plate' | 'fail-target' | 'warning-only'
+
+export interface TargetedControlTarget {
+  id: string
+  target: string
+  ctCutOff: string
+  status: AmpStatusOption
+}
+
+export interface InstrumentControlConfig {
+  id: string
+  controlType: ControlTypeOption
+  control: string
+  scope: ControlScope
+  expectedResultCtCutOff?: string
+  status?: AmpStatusOption
+  targets?: TargetedControlTarget[]
+  plateFailureBehavior?: PlateFailureBehavior
+  targetedFailureBehavior?: TargetedFailureBehavior
+}
+
+export interface ManagedInstrument {
+  id: string
+  name: string
+  instrumentType: string
+  connectionStatus: InstrumentConnectionStatus
+  authKey: string
+  enabled: boolean
+  isMolecular?: boolean
+  controls: InstrumentControlConfig[]
+}
+
+export interface AddControlFormData {
+  controlType: ControlTypeOption
+  control: string
+  scope: ControlScope
+  expectedResultCtCutOff: string
+  status: AmpStatusOption
+  targets: TargetedControlTarget[]
+  plateFailureBehavior: PlateFailureBehavior
+  targetedFailureBehavior: TargetedFailureBehavior
+}
 
 export type WaitingListCategoryId =
   | 'all'
