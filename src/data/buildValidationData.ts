@@ -23,6 +23,7 @@ import type {
   WellStatus,
   WellTargetRow,
   PlateSize,
+  PlateViewReadiness,
 } from '../types'
 import { AVAILABLE_TARGETS } from './instrumentManagementMockData'
 import {
@@ -54,6 +55,7 @@ interface BuildInput {
   defaultPanel: string
   plateSize?: PlateSize
   instrumentControls?: InstrumentControlConfig[]
+  plateViewReadiness: PlateViewReadiness
 }
 
 function nowTime(): string {
@@ -422,6 +424,7 @@ export function buildValidationData(input: BuildInput): ParsedUploadData {
     defaultPanel,
     plateSize = 96,
     instrumentControls = [],
+    plateViewReadiness,
   } = input
 
   const wellSampleDup = new Map<string, Set<string>>()
@@ -515,5 +518,6 @@ export function buildValidationData(input: BuildInput): ParsedUploadData {
     plateWells,
     activityLog,
     qcBanner,
+    plateViewReadiness,
   }
 }

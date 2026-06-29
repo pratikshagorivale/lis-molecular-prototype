@@ -90,6 +90,7 @@ async function main() {
     device: 'QS5',
     plateId: 'MU1',
     runDate: '2024-10-28',
+    plateViewReadiness: { canFormPlate: true, wellColumnMapped: true, plateIdAvailable: true },
   })
   console.log('qcBanner:', JSON.stringify(built.qcBanner, null, 2))
 

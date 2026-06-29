@@ -4,7 +4,7 @@ import { loadLisRegistry } from '../data/lisSampleRegistry'
 import { normalizeAmpStatusCell, parseInterpretation } from './interpretation'
 import { isControlRecord, isQcFlag, parseQcType } from './qcDetection'
 import { combineRowCol, normalizeWell } from './wellPosition'
-import type { FieldMapping, FileParseContext, InstrumentControlConfig, Interpretation, MappingTargetKey, ParsedUploadData, PlateSize, TargetType, UserFieldMapping } from '../types'
+import type { FieldMapping, FileParseContext, InstrumentControlConfig, Interpretation, MappingTargetKey, ParsedUploadData, PlateSize, PlateViewReadiness, TargetType, UserFieldMapping } from '../types'
 
 export interface RawMolecularRow {
   well: string
@@ -592,6 +592,40 @@ function propagateWellControlContext(records: RawMolecularRow[]): RawMolecularRo
   return merged
 }
 
+export function evaluatePlateViewReadiness(
+  userMappings: UserFieldMapping[],
+  options?: { plateIdOverride?: string; metadataPlateId?: string },
+): PlateViewReadiness {
+  const mappings = syncUserMappingsWithFieldDefs(userMappings)
+  const wellColumnMapped = mappings.some((m) => m.key === 'well' && m.sourceColumn)
+  const plateIdColumnMapped = mappings.some((m) => m.key === 'plateId' && m.sourceColumn)
+  const plateIdOverrideProvided = Boolean(options?.plateIdOverride?.trim())
+  const metadataPlateId = Boolean(options?.metadataPlateId?.trim())
+  const plateIdAvailable = plateIdColumnMapped || plateIdOverrideProvided || metadataPlateId
+  const canFormPlate = wellColumnMapped && plateIdAvailable
+
+  if (canFormPlate) {
+    return { canFormPlate, wellColumnMapped, plateIdAvailable }
+  }
+
+  const missing: string[] = []
+  if (!wellColumnMapped) missing.push('well positions')
+  if (!plateIdAvailable) missing.push('Plate ID')
+
+  const missingLabel = missing.length === 2
+    ? 'Plate ID and well positions'
+    : missing[0] === 'Plate ID'
+      ? 'Plate ID'
+      : 'well positions'
+
+  return {
+    canFormPlate,
+    wellColumnMapped,
+    plateIdAvailable,
+    message: `Plate cannot be formed — ${missingLabel} ${missing.length === 1 ? 'was' : 'were'} not found. Map Well Position and Plate ID in Field Mapping, or enter a Plate ID manually before continuing.`,
+  }
+}
+
 export function resolvePlateId(
   context: FileParseContext,
   records: RawMolecularRow[],
@@ -628,6 +662,11 @@ export async function buildUploadDataFromContext(
     records = records.map((r) => ({ ...r, plateId }))
   }
 
+  const plateViewReadiness = evaluatePlateViewReadiness(mappings, {
+    plateIdOverride: options?.plateIdOverride,
+    metadataPlateId: context.metadata.plateId,
+  })
+
   return buildValidationData({
     fileName: context.fileName,
     rawText: context.rawText,
@@ -639,7 +678,8 @@ export async function buildUploadDataFromContext(
     defaultPanel: context.metadata.defaultPanel,
     plateSize: options?.plateSize ?? 96,
     instrumentControls: options?.instrumentControls,
-  })
+    plateViewReadiness,
+   })
 }
 
 export async function parseMolecularFile(file: File): Promise<ParsedUploadData> {

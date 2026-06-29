@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Modal } from '../ui/Modal'
 import { AVAILABLE_TARGETS } from '../../data/instrumentManagementMockData'
 import { getTargetCtCutOff } from '../../data/targetMaster'
+import { buildTargetCtCutOff, defaultCtCutOffFromMaster, formatCtCutOff, mergeTargetCtCutOff, parseCtCutOff, type CtCutOffOperator, type ParsedCtCutOff } from '../../utils/ctCutOff'
 import type {
   AddControlFormData,
   AmpStatusOption,
@@ -23,6 +24,11 @@ const CONTROL_TYPES: ControlTypeOption[] = [
 
 const AMP_STATUSES: AmpStatusOption[] = ['Detected', 'Not Detected', 'Inconclusive']
 
+const CT_CUT_OFF_OPERATORS: { value: CtCutOffOperator; label: string }[] = [
+  { value: '>=', label: 'Greater than or equal to (≥)' },
+  { value: '<=', label: 'Less than or equal to (≤)' },
+]
+
 const emptyForm = (): AddControlFormData => ({
   controlType: 'Positive Control',
   control: '',
@@ -43,7 +49,7 @@ function controlToForm(control: InstrumentControlConfig): AddControlFormData {
     status: control.status ?? 'Detected',
     targets: (control.targets ?? []).map((target) => ({
       ...target,
-      ctCutOff: getTargetCtCutOff(target.target),
+      ctCutOff: mergeTargetCtCutOff(target.ctCutOff, getTargetCtCutOff(target.target)),
       status: target.status ?? 'Detected',
     })),
     plateFailureBehavior: control.plateFailureBehavior ?? 'fail-plate',
@@ -64,6 +70,68 @@ function FieldLabel({ children, required }: { children: React.ReactNode; require
       {children}
       {required && <span className="text-red-500 ml-0.5">*</span>}
     </label>
+  )
+}
+
+function CtCutOffFields({
+  cutOff,
+  onChange,
+  compact = false,
+  showHint = false,
+  readOnlyValue,
+}: {
+  cutOff: ParsedCtCutOff
+  onChange: (patch: Partial<ParsedCtCutOff>) => void
+  compact?: boolean
+  showHint?: boolean
+  readOnlyValue?: string
+}) {
+  const masterValue = readOnlyValue?.trim()
+  const displayValue = masterValue && masterValue !== '—' ? masterValue : cutOff.value
+
+  return (
+    <div>
+      <div className="flex gap-2">
+        <select
+          value={cutOff.operator}
+          onChange={(e) => onChange({ operator: e.target.value as CtCutOffOperator })}
+          className={`shrink-0 px-2 border border-slate-200 rounded bg-white text-slate-700 ${compact ? 'w-12 py-1 text-[11px]' : 'w-[4.5rem] py-1.5'}`}
+          aria-label="CT cut off comparison"
+        >
+          {CT_CUT_OFF_OPERATORS.map((op) => (
+            <option key={op.value} value={op.value}>{op.value}</option>
+          ))}
+        </select>
+        {readOnlyValue !== undefined ? (
+          <span
+            className={`flex-1 min-w-0 px-2 border border-slate-100 rounded bg-slate-50 text-slate-600 ${compact ? 'py-1 text-[11px]' : 'py-1.5'}`}
+            aria-label="CT cut off value from master"
+          >
+            {masterValue && masterValue !== '—' ? masterValue : '—'}
+          </span>
+        ) : (
+          <input
+            type="number"
+            min="0"
+            step="any"
+            value={cutOff.value}
+            onChange={(e) => onChange({ value: e.target.value })}
+            placeholder="e.g. 35"
+            className={`flex-1 min-w-0 px-2 border border-slate-200 rounded text-slate-700 ${compact ? 'py-1 text-[11px]' : 'py-1.5'}`}
+            aria-label="CT cut off value"
+          />
+        )}
+      </div>
+      {showHint && (
+        <p className="text-[10px] text-slate-400 mt-1">
+          {displayValue
+            ? `Pass when CT is ${cutOff.operator} ${displayValue}`
+            : readOnlyValue !== undefined
+              ? 'Select a comparison — CT value comes from target master'
+              : 'Select a comparison and enter a CT value'}
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -94,10 +162,20 @@ export function AddControlModal({ open, editingControl, onClose, onSave }: AddCo
       ...prev,
       targets: [
         ...prev.targets,
-        { id: crypto.randomUUID(), target, ctCutOff: getTargetCtCutOff(target), status: 'Detected' },
+        { id: crypto.randomUUID(), target, ctCutOff: defaultCtCutOffFromMaster(getTargetCtCutOff(target)), status: 'Detected' },
       ],
     }))
     setTargetSearch('')
+  }
+
+  const updateTargetCtCutOff = (id: string, operator: CtCutOffOperator) => {
+    setForm((prev) => ({
+      ...prev,
+      targets: prev.targets.map((row) => {
+        if (row.id !== id) return row
+        return { ...row, ctCutOff: buildTargetCtCutOff(operator, getTargetCtCutOff(row.target)) }
+      }),
+    }))
   }
 
   const updateTarget = (id: string, patch: Partial<TargetedControlTarget>) => {
@@ -128,7 +206,7 @@ export function AddControlModal({ open, editingControl, onClose, onSave }: AddCo
       targets: form.scope === 'targeted'
         ? form.targets.map((target) => ({
             ...target,
-            ctCutOff: getTargetCtCutOff(target.target),
+            ctCutOff: mergeTargetCtCutOff(target.ctCutOff, getTargetCtCutOff(target.target)),
           }))
         : undefined,
       plateFailureBehavior: form.scope === 'plate' ? form.plateFailureBehavior : undefined,
@@ -142,6 +220,16 @@ export function AddControlModal({ open, editingControl, onClose, onSave }: AddCo
     (form.scope === 'plate'
       ? Boolean(form.status)
       : form.targets.length > 0 && form.targets.every((target) => Boolean(target.status)))
+
+  const ctCutOff = parseCtCutOff(form.expectedResultCtCutOff)
+
+  const updateCtCutOff = (patch: Partial<ParsedCtCutOff>) => {
+    const next = { ...ctCutOff, ...patch }
+    setForm((prev) => ({
+      ...prev,
+      expectedResultCtCutOff: formatCtCutOff(next.operator, next.value),
+    }))
+  }
 
   return (
     <Modal
@@ -219,11 +307,10 @@ export function AddControlModal({ open, editingControl, onClose, onSave }: AddCo
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <FieldLabel>Expected Result value (CT Cut Off)</FieldLabel>
-                <input
-                  type="text"
-                  value={form.expectedResultCtCutOff}
-                  onChange={(e) => setForm((prev) => ({ ...prev, expectedResultCtCutOff: e.target.value }))}
-                  className="w-full px-2 py-1.5 border border-slate-200 rounded text-slate-700"
+                <CtCutOffFields
+                  cutOff={ctCutOff}
+                  onChange={(patch) => updateCtCutOff(patch)}
+                  showHint
                 />
               </div>
               <div>
@@ -318,7 +405,16 @@ export function AddControlModal({ open, editingControl, onClose, onSave }: AddCo
                     form.targets.map((row) => (
                       <tr key={row.id} className="border-t border-slate-100">
                         <td className="px-2 py-1.5 text-slate-700">{row.target}</td>
-                        <td className="px-2 py-1.5 text-slate-600">{getTargetCtCutOff(row.target)}</td>
+                        <td className="px-2 py-1.5">
+                          <CtCutOffFields
+                            cutOff={parseCtCutOff(row.ctCutOff)}
+                            onChange={(patch) => {
+                              if (patch.operator) updateTargetCtCutOff(row.id, patch.operator)
+                            }}
+                            readOnlyValue={getTargetCtCutOff(row.target)}
+                            compact
+                          />
+                        </td>
                         <td className="px-2 py-1.5">
                           <select
                             value={row.status}

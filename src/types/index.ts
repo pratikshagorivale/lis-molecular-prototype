@@ -211,6 +211,13 @@ export interface QcBanner {
   status: string
 }
 
+export interface PlateViewReadiness {
+  canFormPlate: boolean
+  wellColumnMapped: boolean
+  plateIdAvailable: boolean
+  message?: string
+}
+
 export interface ParsedUploadData {
   fileName: string
   rawText: string
@@ -222,6 +229,7 @@ export interface ParsedUploadData {
   plateWells: WellData[]
   activityLog: ActivityLogEntry[]
   qcBanner: QcBanner
+  plateViewReadiness: PlateViewReadiness
 }
 
 export type Screen = 'home' | 'validation'

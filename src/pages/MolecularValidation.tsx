@@ -53,7 +53,7 @@ export function MolecularValidation({
   onReleaseValidOnly,
   onReleaseSelected,
 }: MolecularValidationProps) {
-  const { plateSummary, qcBanner, sampleGroups, plateWells } = uploadData
+  const { plateSummary, qcBanner, sampleGroups, plateWells, plateViewReadiness } = uploadData
   const plateId = plateSummary.plateId
   const [view, setView] = useState<'table' | 'plate'>('table')
   const [search, setSearch] = useState('')
@@ -110,7 +110,7 @@ export function MolecularValidation({
         </div>
       </header>
 
-      {view === 'plate' && (
+      {view === 'plate' && plateViewReadiness.canFormPlate && (
       <div className={`sticky top-0 z-10 border-b px-4 py-1.5 flex items-center gap-2.5 text-[11px] shrink-0 ${qcBannerClasses}`}>
         <span className={`font-semibold shrink-0 ${qcBannerTitleClasses}`}>Plate {plateId}</span>
         <span className="text-slate-300 shrink-0">·</span>
@@ -181,7 +181,7 @@ export function MolecularValidation({
             Release Selected
           </button>
         )}
-        {view === 'plate' && (
+        {view === 'plate' && plateViewReadiness.canFormPlate && (
           <>
             <button
               onClick={onReleaseValidOnly}
@@ -221,6 +221,30 @@ export function MolecularValidation({
               onWellOpen={onWellClick}
               searchQuery={search}
             />
+          ) : !plateViewReadiness.canFormPlate ? (
+            <div className="flex items-center justify-center min-h-[320px]">
+              <div className="max-w-md w-full bg-white border border-amber-200 rounded-lg p-6 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <div>
+                    <h2 className="text-sm font-semibold text-amber-800 mb-1">Plate view unavailable</h2>
+                    <p className="text-sm text-amber-700 leading-relaxed">
+                      {plateViewReadiness.message}
+                    </p>
+                    <ul className="mt-3 text-xs text-slate-600 space-y-1">
+                      {!plateViewReadiness.wellColumnMapped && (
+                        <li>• Well Position column is not mapped</li>
+                      )}
+                      {!plateViewReadiness.plateIdAvailable && (
+                        <li>• Plate ID is not mapped or provided</li>
+                      )}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
           ) : (
             <PlateView
               wells={plateWells}
