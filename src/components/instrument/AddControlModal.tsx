@@ -25,7 +25,7 @@ const CONTROL_TYPES: ControlTypeOption[] = [
 const AMP_STATUSES: AmpStatusOption[] = ['Detected', 'Not Detected', 'Inconclusive']
 
 const CT_CUT_OFF_OPERATORS: { value: CtCutOffOperator; label: string }[] = [
-  { value: '>=', label: 'Greater than or equal to (≥)' },
+  { value: '>', label: 'Greater than (>)' },
   { value: '<=', label: 'Less than or equal to (≤)' },
 ]
 

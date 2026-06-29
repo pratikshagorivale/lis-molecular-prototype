@@ -1,4 +1,4 @@
-export type CtCutOffOperator = '>=' | '<='
+export type CtCutOffOperator = '>' | '<='
 
 export interface ParsedCtCutOff {
   operator: CtCutOffOperator
@@ -9,9 +9,10 @@ const DEFAULT_OPERATOR: CtCutOffOperator = '<='
 
 export function parseCtCutOff(raw: string): ParsedCtCutOff {
   const trimmed = raw.trim()
-  const match = trimmed.match(/^(>=|<=)\s*(\d+(?:\.\d+)?)$/)
+  const match = trimmed.match(/^(>=|<=|>)\s*(\d+(?:\.\d+)?)$/)
   if (match) {
-    return { operator: match[1] as CtCutOffOperator, value: match[2] }
+    const operator: CtCutOffOperator = match[1] === '>=' ? '>' : match[1] as CtCutOffOperator
+    return { operator, value: match[2] }
   }
   if (/^\d+(?:\.\d+)?$/.test(trimmed)) {
     return { operator: DEFAULT_OPERATOR, value: trimmed }
@@ -54,5 +55,5 @@ export function matchesCtCutOff(actualCt: number | string, cutOff: string): bool
   const threshold = Number.parseFloat(parsed.value)
   if (Number.isNaN(actual) || Number.isNaN(threshold)) return null
 
-  return parsed.operator === '>=' ? actual >= threshold : actual <= threshold
+  return parsed.operator === '>' ? actual > threshold : actual <= threshold
 }
