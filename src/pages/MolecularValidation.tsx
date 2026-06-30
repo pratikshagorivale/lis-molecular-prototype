@@ -5,6 +5,7 @@ import { WellDetailsPanel } from '../components/WellDetailsDrawer'
 import { Badge } from '../components/ui/Badge'
 import { countValidWells } from '../utils/releaseSamples'
 import { controlValidationsForWell } from '../utils/qcDetection'
+import { isControlTypeConfigured } from '../utils/controlEvaluation'
 import type { FailedControlWell, InstrumentControlConfig, ParsedUploadData, WellData } from '../types'
 
 function failedWellsCompact(failed: FailedControlWell[] | undefined, controlType: string): string {
@@ -68,6 +69,9 @@ export function MolecularValidation({
     [selectedWell, plateWells, instrumentControls],
   )
 
+  const showConfiguredControl = (type: 'PC' | 'NC' | 'NTC' | 'IC') =>
+    instrumentControls.length === 0 || isControlTypeConfigured(type, instrumentControls)
+
   const plateStatus = qcBanner.qcPassed
     ? { label: 'Valid', variant: 'success' as const }
     : { label: 'Needs review', variant: 'warning' as const }
@@ -115,32 +119,36 @@ export function MolecularValidation({
         <span className={`font-semibold shrink-0 ${qcBannerTitleClasses}`}>Plate {plateId}</span>
         <span className="text-slate-300 shrink-0">·</span>
         <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
-          {qcBanner.pcPresent ? (
-            <span className={qcBanner.pcPassed ? 'text-emerald-700' : 'text-red-700'}>
-              {qcBanner.pcPassed
-                ? 'PC Passed'
-                : `PC Failed${failedWellsCompact(qcBanner.failedControlWells, 'PC') ? ` · ${failedWellsCompact(qcBanner.failedControlWells, 'PC')}` : ''}`}
-            </span>
-          ) : (
-            <span className="text-amber-700">PC Missing</span>
+          {showConfiguredControl('PC') && (
+            qcBanner.pcPresent ? (
+              <span className={qcBanner.pcPassed ? 'text-emerald-700' : 'text-red-700'}>
+                {qcBanner.pcPassed
+                  ? 'PC Passed'
+                  : `PC Failed${failedWellsCompact(qcBanner.failedControlWells, 'PC') ? ` · ${failedWellsCompact(qcBanner.failedControlWells, 'PC')}` : ''}`}
+              </span>
+            ) : (
+              <span className="text-amber-700">PC Missing</span>
+            )
           )}
-          {qcBanner.ncPresent ? (
-            <span className={qcBanner.ncPassed ? 'text-emerald-700' : 'text-red-700'}>
-              {qcBanner.ncPassed
-                ? 'NC Passed'
-                : `NC Failed${failedWellsCompact(qcBanner.failedControlWells, 'NC') ? ` · ${failedWellsCompact(qcBanner.failedControlWells, 'NC')}` : ''}`}
-            </span>
-          ) : (
-            <span className="text-amber-700">NC Missing</span>
+          {showConfiguredControl('NC') && (
+            qcBanner.ncPresent ? (
+              <span className={qcBanner.ncPassed ? 'text-emerald-700' : 'text-red-700'}>
+                {qcBanner.ncPassed
+                  ? 'NC Passed'
+                  : `NC Failed${failedWellsCompact(qcBanner.failedControlWells, 'NC') ? ` · ${failedWellsCompact(qcBanner.failedControlWells, 'NC')}` : ''}`}
+              </span>
+            ) : (
+              <span className="text-amber-700">NC Missing</span>
+            )
           )}
-          {qcBanner.ntcPresent && (
+          {showConfiguredControl('NTC') && qcBanner.ntcPresent && (
             <span className={qcBanner.ntcPassed ? 'text-emerald-700' : 'text-red-700'}>
               {qcBanner.ntcPassed
                 ? 'NTC Passed'
                 : `NTC Failed${failedWellsCompact(qcBanner.failedControlWells, 'NTC') ? ` · ${failedWellsCompact(qcBanner.failedControlWells, 'NTC')}` : ''}`}
             </span>
           )}
-          {qcBanner.icPresent && (
+          {showConfiguredControl('IC') && qcBanner.icPresent && (
             <span className={qcBanner.icPassed ? 'text-emerald-700' : 'text-red-700'}>
               {qcBanner.icPassed
                 ? 'IC Passed'

@@ -1,6 +1,11 @@
 import { isUnknownSample, lookupSample } from './lisSampleRegistry'
 import { isPositiveResult, parseInterpretation } from '../utils/interpretation'
 import { controlLabel, evaluatePlateQc, getPlateControlValidations, isControlRecord, isPlateControlWell, type PlateQcEvaluation } from '../utils/qcDetection'
+import {
+  evaluatePlateQcFromConfig,
+  findWellsForConfig,
+  getConfiguredPlateControlValidations,
+} from '../utils/controlEvaluation'
 import { isValidPlateWell, normalizeWell } from '../utils/wellPosition'
 import type { RawMolecularRow } from '../utils/parseMolecularFile'
 import type {
@@ -98,7 +103,13 @@ function mapWellQcStatus(status: PlateQcEvaluation['status']): WellQcStatus {
   return 'QC Warning'
 }
 
-function buildControlValidations(records: RawMolecularRow[]): WellControlValidation[] {
+function buildControlValidations(
+  records: RawMolecularRow[],
+  instrumentControls: InstrumentControlConfig[] = [],
+): WellControlValidation[] {
+  if (instrumentControls.length > 0) {
+    return getConfiguredPlateControlValidations(records, instrumentControls, AVAILABLE_TARGETS)
+  }
   return getPlateControlValidations(records)
 }
 
@@ -129,6 +140,7 @@ function buildPlateWellsFromRecords(
   runDate: string,
   failedControlWellIds: Set<string> = new Set(),
   plateQc: PlateQcEvaluation,
+  instrumentControls: InstrumentControlConfig[] = [],
 ): WellData[] {
   const byWell = new Map<string, RawMolecularRow[]>()
   const unmappedBySample = new Map<string, RawMolecularRow[]>()
@@ -160,7 +172,7 @@ function buildPlateWellsFromRecords(
     }
   }
 
-  const controlValidations = buildControlValidations(records)
+  const controlValidations = buildControlValidations(records, instrumentControls)
   const qcStatus = mapWellQcStatus(plateQc.status)
   const wellSampleDup = new Map<string, Set<string>>()
   for (const r of records) {
@@ -355,6 +367,7 @@ function buildSummaries(
   runDate: string,
   plateSize: PlateSize = 96,
   plateQc: PlateQcEvaluation = evaluatePlateQc(records),
+  instrumentControls: InstrumentControlConfig[] = [],
 ): { plateSummary: PlateSummary; validationSummary: ValidationSummary; qcBanner: QcBanner } {
   const sampleRecords = records.filter((r) => !isControlRecord(r))
   const controlRecords = records.filter((r) => isControlRecord(r))
@@ -378,7 +391,9 @@ function buildSummaries(
   }
 
   const errors = unknowns.length
-  const missingControls = [plateQc.pc, plateQc.nc].filter((t) => !t.present).length
+  const missingControls = instrumentControls.length > 0
+    ? instrumentControls.filter((config) => findWellsForConfig(records, config).length === 0).length
+    : [plateQc.pc, plateQc.nc].filter((t) => !t.present).length
 
   return {
     plateSummary: {
@@ -454,8 +469,18 @@ export function buildValidationData(input: BuildInput): ParsedUploadData {
     selected: rowValidationStatus(r, false) === 'Valid',
   }))
 
-  const plateQc = evaluatePlateQc(records)
-  const { plateSummary, validationSummary, qcBanner } = buildSummaries(records, plateId, device, runDate, plateSize, plateQc)
+  const plateQc = instrumentControls.length > 0
+    ? evaluatePlateQcFromConfig(records, instrumentControls, AVAILABLE_TARGETS)
+    : evaluatePlateQc(records)
+  const { plateSummary, validationSummary, qcBanner } = buildSummaries(
+    records,
+    plateId,
+    device,
+    runDate,
+    plateSize,
+    plateQc,
+    instrumentControls,
+  )
   const failedControlWellIds = new Set(qcBanner.failedControlWells.map((f) => f.wellId))
   const affectedTargets = computeAffectedTargetsFromFailedTargetedControls(
     records,
@@ -471,6 +496,7 @@ export function buildValidationData(input: BuildInput): ParsedUploadData {
     runDate,
     failedControlWellIds,
     plateQc,
+    instrumentControls,
   ).map((well) => {
     const affected = wellTestsAffectedTarget(well, affectedTargets)
     let qcStatus = well.qcStatus

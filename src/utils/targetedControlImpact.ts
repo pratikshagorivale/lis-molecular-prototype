@@ -1,38 +1,14 @@
 import type { FailedControlWell, InstrumentControlConfig, WellData } from '../types'
 import type { RawMolecularRow } from './parseMolecularFile'
 import type { ControlType } from './qcDetection'
-import { isControlDetected, isControlNotDetected } from './qcDetection'
+import { controlRowFailed, findControlConfigForWell } from './controlEvaluation'
+import { expandInstrumentTargetName, normalizeTargetName } from './targetNames'
+
+export { normalizeTargetName, expandInstrumentTargetName } from './targetNames'
 import { normalizeWell } from './wellPosition'
-
-const CONTROL_TYPE_TO_CONFIG: Record<ControlType, InstrumentControlConfig['controlType']> = {
-  PC: 'Positive Control',
-  NC: 'Negative Control',
-  NTC: 'NTC',
-  IC: 'Internal Control',
-}
-
-export function normalizeTargetName(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, ' ')
-}
-
-export function expandInstrumentTargetName(name: string, catalogTargets: string[]): string[] {
-  const result = new Set<string>([normalizeTargetName(name)])
-  const match = name.trim().match(/^organism\s*(\d+)$/i)
-  if (match) {
-    const idx = parseInt(match[1], 10) - 1
-    if (idx >= 0 && idx < catalogTargets.length) {
-      result.add(normalizeTargetName(catalogTargets[idx]))
-    }
-  }
-  return [...result]
-}
 
 function getWellRows(records: RawMolecularRow[], wellId: string): RawMolecularRow[] {
   return records.filter((r) => normalizeWell(r.well) === wellId)
-}
-
-function rowFailsControlCheck(row: RawMolecularRow, type: ControlType): boolean {
-  return type === 'PC' || type === 'IC' ? !isControlDetected(row) : !isControlNotDetected(row)
 }
 
 function addExpandedTarget(
@@ -52,10 +28,11 @@ function addFailedRowTargets(
   type: ControlType,
   catalogTargets: string[],
   onlyFailedRows: boolean,
+  config?: InstrumentControlConfig,
 ) {
   for (let i = 0; i < targetRows.length; i++) {
     const row = targetRows[i]
-    if (onlyFailedRows && !rowFailsControlCheck(row, type)) continue
+    if (onlyFailedRows && !controlRowFailed(row, type, config, catalogTargets)) continue
 
     affected.add(normalizeTargetName(row.target))
     if (configured[i]) {
@@ -74,31 +51,25 @@ export function computeAffectedTargetsFromFailedTargetedControls(
 
   for (const failed of failedControlWells) {
     const type = failed.controlType as ControlType
-    if (!CONTROL_TYPE_TO_CONFIG[type]) continue
-
-    const config = instrumentControls.find(
-      (c) => c.controlType === CONTROL_TYPE_TO_CONFIG[type] && c.scope === 'targeted',
-    )
     const wellRows = getWellRows(records, failed.wellId)
     const targetRows = wellRows.filter((r) => r.target?.trim())
+    const config = findControlConfigForWell(wellRows, instrumentControls)
     const configured = config?.targets ?? []
 
-    if (config?.targets?.length && config.targetedFailureBehavior === 'warning-only') continue
+    if (config?.scope === 'targeted' && config.targetedFailureBehavior === 'fail-target') {
+      addFailedRowTargets(affected, targetRows, configured, type, catalogTargets, true, config)
+      continue
+    }
 
-    if (config?.targets?.length && config.targetedFailureBehavior === 'fail-plate') {
+    if (config?.scope === 'targeted' && config.targetedFailureBehavior === 'fail-plate') {
       for (const target of configured) {
         addExpandedTarget(affected, target.target, catalogTargets)
       }
-      addFailedRowTargets(affected, targetRows, configured, type, catalogTargets, true)
+      addFailedRowTargets(affected, targetRows, configured, type, catalogTargets, true, config)
       continue
     }
 
-    if (config?.targets?.length) {
-      addFailedRowTargets(affected, targetRows, configured, type, catalogTargets, true)
-      continue
-    }
-
-    addFailedRowTargets(affected, targetRows, configured, type, catalogTargets, true)
+    addFailedRowTargets(affected, targetRows, configured, type, catalogTargets, true, config)
   }
 
   return affected

@@ -7,7 +7,7 @@ import { MolecularReportEntryPage } from './pages/MolecularReportEntryPage'
 import { InstrumentManagementListPage } from './pages/InstrumentManagementListPage'
 import { InstrumentDetailPage } from './pages/InstrumentDetailPage'
 import { partiallyCompletedEntries } from './data/waitingListMockData'
-import { managedInstruments as initialManagedInstruments } from './data/instrumentManagementMockData'
+import { loadManagedInstruments, saveManagedInstruments } from './utils/instrumentStorage'
 import { buildMolecularReportFromUpload, resolveWaitingEntryForUpload } from './utils/sendResultsToReport'
 import type { MolecularReportData } from './types'
 import { UploadMolecularResultsModal } from './components/UploadMolecularResultsModal'
@@ -63,7 +63,7 @@ function App() {
   const [releaseCounts, setReleaseCounts] = useState({ validCount: 0, totalCount: 0 })
   const [toast, setToast] = useState<string | null>(null)
   const [qcView, setQcView] = useState<QcView>('list')
-  const [managedInstruments, setManagedInstruments] = useState<ManagedInstrument[]>(initialManagedInstruments)
+  const [managedInstruments, setManagedInstruments] = useState<ManagedInstrument[]>(() => loadManagedInstruments())
   const [selectedManagedInstrumentId, setSelectedManagedInstrumentId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -97,6 +97,14 @@ function App() {
       setApplying(false)
     }
   }, [plateIdInput, plateSize, managedInstruments])
+
+  const molecularControls = managedInstruments.find((i) => i.isMolecular)?.controls ?? []
+  const molecularControlsKey = JSON.stringify(molecularControls)
+
+  useEffect(() => {
+    if (!fileContext || userMappings.length === 0 || !mappingsReadyForPreview(userMappings)) return
+    applyMappings(fileContext, userMappings)
+  }, [molecularControlsKey, fileContext, userMappings, applyMappings])
 
   const processFile = useCallback(async (file: File) => {
     setParsing(true)
@@ -261,9 +269,13 @@ function App() {
   }, [])
 
   const handleUpdateInstrumentControls = useCallback((instrumentId: string, controls: InstrumentControlConfig[]) => {
-    setManagedInstruments((prev) => prev.map((instrument) => (
-      instrument.id === instrumentId ? { ...instrument, controls } : instrument
-    )))
+    setManagedInstruments((prev) => {
+      const next = prev.map((instrument) => (
+        instrument.id === instrumentId ? { ...instrument, controls } : instrument
+      ))
+      saveManagedInstruments(next)
+      return next
+    })
     setToast('Control configuration saved.')
   }, [])
 

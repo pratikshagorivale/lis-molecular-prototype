@@ -47,6 +47,10 @@ export function normalizeCtCutOff(raw: string, masterFallback?: string): string 
   return mergeTargetCtCutOff(raw, masterFallback ?? '')
 }
 
+export function interpretationForCtCutOffOperator(operator: CtCutOffOperator): 'Detected' | 'Not Detected' {
+  return operator === '<=' ? 'Detected' : 'Not Detected'
+}
+
 export function matchesCtCutOff(actualCt: number | string, cutOff: string): boolean | null {
   const parsed = parseCtCutOff(cutOff)
   if (!parsed.value) return null

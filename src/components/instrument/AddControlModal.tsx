@@ -2,14 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { Modal } from '../ui/Modal'
 import { AVAILABLE_TARGETS } from '../../data/instrumentManagementMockData'
 import { getTargetCtCutOff } from '../../data/targetMaster'
-import { buildTargetCtCutOff, defaultCtCutOffFromMaster, formatCtCutOff, mergeTargetCtCutOff, parseCtCutOff, type CtCutOffOperator, type ParsedCtCutOff } from '../../utils/ctCutOff'
+import { buildTargetCtCutOff, defaultCtCutOffFromMaster, formatCtCutOff, interpretationForCtCutOffOperator, mergeTargetCtCutOff, parseCtCutOff, type CtCutOffOperator, type ParsedCtCutOff } from '../../utils/ctCutOff'
 import type {
   AddControlFormData,
   AmpStatusOption,
   ControlScope,
   ControlTypeOption,
   InstrumentControlConfig,
-  PlateFailureBehavior,
   TargetedControlTarget,
   TargetedFailureBehavior,
 } from '../../types'
@@ -41,19 +40,23 @@ const emptyForm = (): AddControlFormData => ({
 })
 
 function controlToForm(control: InstrumentControlConfig): AddControlFormData {
+  const expectedResultCtCutOff = control.expectedResultCtCutOff ?? ''
   return {
     controlType: control.controlType,
     control: control.control,
     scope: control.scope,
-    expectedResultCtCutOff: control.expectedResultCtCutOff ?? '',
-    status: control.status ?? 'Detected',
-    targets: (control.targets ?? []).map((target) => ({
-      ...target,
-      ctCutOff: mergeTargetCtCutOff(target.ctCutOff, getTargetCtCutOff(target.target)),
-      status: target.status ?? 'Detected',
-    })),
-    plateFailureBehavior: control.plateFailureBehavior ?? 'fail-plate',
-    targetedFailureBehavior: control.targetedFailureBehavior ?? 'fail-plate',
+    expectedResultCtCutOff,
+    status: interpretationForCtCutOffOperator(parseCtCutOff(expectedResultCtCutOff).operator),
+    targets: (control.targets ?? []).map((target) => {
+      const ctCutOff = mergeTargetCtCutOff(target.ctCutOff, getTargetCtCutOff(target.target))
+      return {
+        ...target,
+        ctCutOff,
+        status: interpretationForCtCutOffOperator(parseCtCutOff(ctCutOff).operator),
+      }
+    }),
+    plateFailureBehavior: control.plateFailureBehavior === 'warning-only' ? 'fail-plate' : (control.plateFailureBehavior ?? 'fail-plate'),
+    targetedFailureBehavior: control.targetedFailureBehavior === 'warning-only' ? 'fail-plate' : (control.targetedFailureBehavior ?? 'fail-plate'),
   }
 }
 
@@ -173,7 +176,11 @@ export function AddControlModal({ open, editingControl, onClose, onSave }: AddCo
       ...prev,
       targets: prev.targets.map((row) => {
         if (row.id !== id) return row
-        return { ...row, ctCutOff: buildTargetCtCutOff(operator, getTargetCtCutOff(row.target)) }
+        return {
+          ...row,
+          ctCutOff: buildTargetCtCutOff(operator, getTargetCtCutOff(row.target)),
+          status: interpretationForCtCutOffOperator(operator),
+        }
       }),
     }))
   }
@@ -228,6 +235,7 @@ export function AddControlModal({ open, editingControl, onClose, onSave }: AddCo
     setForm((prev) => ({
       ...prev,
       expectedResultCtCutOff: formatCtCutOff(next.operator, next.value),
+      ...(patch.operator ? { status: interpretationForCtCutOffOperator(patch.operator) } : {}),
     }))
   }
 
@@ -330,28 +338,9 @@ export function AddControlModal({ open, editingControl, onClose, onSave }: AddCo
 
             <div>
               <FieldLabel>Failure Behavior</FieldLabel>
-              <div className="flex items-center gap-6 mt-1">
-                <label className="flex items-center gap-2 text-slate-700 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="plateFailure"
-                    checked={form.plateFailureBehavior === 'fail-plate'}
-                    onChange={() => setForm((prev) => ({ ...prev, plateFailureBehavior: 'fail-plate' as PlateFailureBehavior }))}
-                    className="text-violet-600"
-                  />
-                  Fail Entire Plate
-                </label>
-                <label className="flex items-center gap-2 text-slate-700 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="plateFailure"
-                    checked={form.plateFailureBehavior === 'warning-only'}
-                    onChange={() => setForm((prev) => ({ ...prev, plateFailureBehavior: 'warning-only' as PlateFailureBehavior }))}
-                    className="text-violet-600"
-                  />
-                  Warning Only
-                </label>
-              </div>
+              <p className="text-slate-600 mt-1 leading-relaxed">
+                If this control fails, the entire plate will be marked as failed.
+              </p>
             </div>
           </>
         ) : (
@@ -463,16 +452,6 @@ export function AddControlModal({ open, editingControl, onClose, onSave }: AddCo
                     className="text-violet-600"
                   />
                   Fail Affected Target
-                </label>
-                <label className="flex items-center gap-2 text-slate-700 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="targetedFailure"
-                    checked={form.targetedFailureBehavior === 'warning-only'}
-                    onChange={() => setForm((prev) => ({ ...prev, targetedFailureBehavior: 'warning-only' as TargetedFailureBehavior }))}
-                    className="text-violet-600"
-                  />
-                  Warning Only
                 </label>
               </div>
             </div>
