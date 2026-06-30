@@ -1,4 +1,7 @@
+import { getTargetCtCutOff } from '../data/targetMaster'
 import type { Interpretation } from '../types'
+
+export const DEFAULT_TARGET_CT_CUTOFF = 35
 
 export function normalizeAmpStatusCell(raw: unknown): string {
   if (raw == null || raw === '') return ''
@@ -20,15 +23,31 @@ export function hasAmplifiedCt(ct: string | number | undefined): boolean {
   return !Number.isNaN(n) && n > 0 && n < 45
 }
 
-function inferFromCt(ct: string | number): Interpretation {
-  const s = String(ct).trim()
-  const lower = s.toLowerCase()
-  if (!s || s === '-' || lower === 'undetermined' || lower === 'u' || lower === 'na' || lower === 'n/a') {
-    return 'Not Detected'
-  }
+export function isVagueCtValue(ct: string | number | undefined): boolean {
+  const s = String(ct ?? '').trim().toLowerCase()
+  if (!s || s === '-' || s === 'undetermined' || s === 'u' || s === 'na' || s === 'n/a') return true
   const n = parseFloat(s)
-  if (!Number.isNaN(n) && n > 0 && n < 45) return 'Detected'
-  return 'Not Detected'
+  return Number.isNaN(n) || n <= 0
+}
+
+export function resolveTargetCtCutOffNumeric(target: string): number {
+  const fromMaster = getTargetCtCutOff(target)
+  if (!fromMaster.trim() || fromMaster === '—') return DEFAULT_TARGET_CT_CUTOFF
+  const n = parseFloat(fromMaster)
+  return Number.isNaN(n) ? DEFAULT_TARGET_CT_CUTOFF : n
+}
+
+export function inferInterpretationFromCtCutoff(
+  ct: string | number,
+  cutOff = DEFAULT_TARGET_CT_CUTOFF,
+): Interpretation {
+  if (isVagueCtValue(ct)) return 'Inconclusive'
+  const n = parseFloat(String(ct))
+  return n <= cutOff ? 'Detected' : 'Not Detected'
+}
+
+function inferFromCt(ct: string | number): Interpretation {
+  return inferInterpretationFromCtCutoff(ct, 45)
 }
 
 function matchesNotDetected(v: string): boolean {
@@ -137,19 +156,46 @@ export function parseInterpretation(
   return inferFromCt(ct)
 }
 
+export function parseMappedInterpretation(rawValue: unknown, options?: { isQc?: boolean }): Interpretation {
+  const normalized = normalizeAmpStatusCell(rawValue)
+  const v = normalized.toLowerCase()
+  if (!v) return 'Inconclusive'
+  if (options?.isQc && matchesPassed(v)) return 'Passed'
+  if (matchesDetected(v)) return 'Detected'
+  if (/^inconclusive/.test(v) || /^undetermined/.test(v)) return 'Inconclusive'
+  if (matchesNotDetected(v)) return 'Not Detected'
+  return 'Inconclusive'
+}
+
+export function resolveRowInterpretation(
+  ct: string | number,
+  options: {
+    mappedRaw?: string
+    interpretationMapped: boolean
+    isQc?: boolean
+    target?: string
+  },
+): { interpretation: Interpretation; interpretationValue?: string } {
+  if (options.interpretationMapped) {
+    const raw = (options.mappedRaw ?? '').trim()
+    return {
+      interpretation: parseMappedInterpretation(raw, { isQc: options.isQc }),
+      interpretationValue: raw || undefined,
+    }
+  }
+  if (options.isQc) {
+    return { interpretation: parseInterpretation('', ct, { isQc: true }) }
+  }
+  const cutOff = options.target ? resolveTargetCtCutOffNumeric(options.target) : DEFAULT_TARGET_CT_CUTOFF
+  return { interpretation: inferInterpretationFromCtCutoff(ct, cutOff) }
+}
+
 export function isPositiveResult(
   interpretation: Interpretation,
-  ampStatus?: string,
-  ct?: string | number,
+  _ampStatus?: string,
+  _ct?: string | number,
 ): boolean {
-  if (interpretation === 'Detected' || interpretation === 'Passed') return true
-  if (ampStatus?.trim() && isAmpStatusDetected(ampStatus)) return true
-  if (hasAmplifiedCt(ct)) return true
-  if (ampStatus?.trim()) {
-    const reparsed = parseInterpretation(ampStatus, ct ?? '-')
-    return reparsed === 'Detected' || reparsed === 'Passed'
-  }
-  return inferFromCt(ct ?? '-') === 'Detected'
+  return interpretation === 'Detected' || interpretation === 'Passed'
 }
 
 export function isInconclusiveAmpStatus(ampStatus?: string): boolean {
@@ -161,13 +207,23 @@ export function isInconclusiveAmpStatus(ampStatus?: string): boolean {
 export function displayTargetInterpretation(
   interpretation: Interpretation,
   ampStatus?: string,
-): Interpretation | 'Inconclusive' {
+): Interpretation {
+  if (interpretation === 'Inconclusive') return 'Inconclusive'
   if (ampStatus?.trim() && isInconclusiveAmpStatus(ampStatus)) return 'Inconclusive'
   return interpretation
 }
 
-export function formatInterpretationDisplay(interpretation: Interpretation, ampStatus?: string): string {
-  const raw = ampStatus?.trim()
-  if (raw) return raw
+export function formatInterpretationDisplay(
+  interpretation: Interpretation,
+  options?: { interpretationValue?: string },
+): string {
+  if (options?.interpretationValue?.trim()) return options.interpretationValue.trim()
   return interpretation
+}
+
+export function interpretationDisplayClassName(interpretation: Interpretation): string {
+  if (interpretation === 'Detected') return 'text-red-600 font-medium'
+  if (interpretation === 'Not Detected') return 'text-emerald-600 font-medium'
+  if (interpretation === 'Inconclusive') return 'text-amber-600 font-medium'
+  return 'text-slate-500'
 }

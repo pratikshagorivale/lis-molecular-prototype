@@ -1,12 +1,21 @@
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, useMemo } from 'react'
 import { Modal } from './ui/Modal'
 import { Accordion } from './ui/Accordion'
 import type { FileParseContext, ParsedUploadData, PlateSize, PreviewRow, UserFieldMapping } from '../types'
 import { PLATE_SIZE_OPTIONS } from '../types'
 import { displayTargetInterpretation } from '../utils/interpretation'
+import { normalizeWell } from '../utils/wellPosition'
 import { MAPPING_FIELD_DEFS, syncUserMappingsWithFieldDefs } from '../utils/parseMolecularFile'
 
 const PREVIEW_COLUMN_KEYS = ['well', 'sampleId', 'target', 'result', 'interpretation', 'ampStatus', 'viralLoad'] as const
+
+function mappedPreviewColumns(mappings: UserFieldMapping[]): (typeof PREVIEW_COLUMN_KEYS)[number][] {
+  const synced = syncUserMappingsWithFieldDefs(mappings)
+  return PREVIEW_COLUMN_KEYS.filter((key) => {
+    const mapping = synced.find((field) => field.key === key)
+    return !!mapping?.sourceColumn
+  })
+}
 
 function previewColumnLabel(key: (typeof PREVIEW_COLUMN_KEYS)[number]): string {
   return MAPPING_FIELD_DEFS.find((field) => field.key === key)?.label ?? key
@@ -51,8 +60,8 @@ function renderPreviewCell(row: PreviewRow, key: (typeof PREVIEW_COLUMN_KEYS)[nu
 interface UploadMolecularResultsModalProps {
   open: boolean
   onClose: () => void
-  onContinue: () => void
-  onSendResults: () => void
+  onContinue: (rows: PreviewRow[]) => void
+  onSendResults: (rows: PreviewRow[]) => void
   fileContext: FileParseContext | null
   uploadData: ParsedUploadData | null
   userMappings: UserFieldMapping[]
@@ -196,16 +205,20 @@ function PlateSummaryPanel({
 function FileSelectStep({
   onFileSelect,
   parsing,
+  error,
 }: {
   onFileSelect: (file: File) => void
   parsing: boolean
+  error?: string | null
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
 
   const handleFiles = (files: FileList | null) => {
     const file = files?.[0]
-    if (file) onFileSelect(file)
+    if (!file) return
+    onFileSelect(file)
+    if (inputRef.current) inputRef.current.value = ''
   }
 
   return (
@@ -229,12 +242,16 @@ function FileSelectStep({
           onChange={(e) => handleFiles(e.target.files)}
         />
         <button
+          type="button"
           onClick={() => inputRef.current?.click()}
           disabled={parsing}
           className="px-6 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
         >
           {parsing ? 'Reading file...' : 'Browse files...'}
         </button>
+        {error && (
+          <p className="text-xs text-red-600 mt-4 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</p>
+        )}
         <p className="text-[10px] text-slate-400 mt-4">or drag and drop your file here</p>
       </div>
     </div>
@@ -267,7 +284,15 @@ export function UploadMolecularResultsModal({
 }: UploadMolecularResultsModalProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [rows, setRows] = useState<PreviewRow[]>([])
-  const [selectAll, setSelectAll] = useState(true)
+  const visiblePreviewColumns = useMemo(() => mappedPreviewColumns(userMappings), [userMappings])
+  const wellColumnVisible = visiblePreviewColumns.includes('well')
+
+  const selectableRows = useMemo(
+    () => rows.filter((row) => row.validationStatus !== 'Error'),
+    [rows],
+  )
+  const allWellsSelected = selectableRows.length > 0 && selectableRows.every((row) => row.selected)
+  const someWellsSelected = selectableRows.some((row) => row.selected)
 
   const ps = uploadData?.plateSummary
   const sourceColumns = fileContext?.sourceColumns ?? []
@@ -275,19 +300,37 @@ export function UploadMolecularResultsModal({
   useEffect(() => {
     if (uploadData && open) {
       setRows(uploadData.previewRows)
-      setSelectAll(true)
     }
     if (!open) setRows([])
   }, [uploadData, open])
 
-  const toggleRow = (id: string) => {
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, selected: !r.selected } : r)))
+  const toggleWell = (wellPosition: string) => {
+    const wellId = normalizeWell(wellPosition)
+    if (!wellId) return
+    setRows((prev) => {
+      const inWell = prev.filter(
+        (row) => normalizeWell(row.wellPosition) === wellId && row.validationStatus !== 'Error',
+      )
+      const selectWell = !inWell.every((row) => row.selected)
+      return prev.map((row) => (
+        normalizeWell(row.wellPosition) === wellId && row.validationStatus !== 'Error'
+          ? { ...row, selected: selectWell }
+          : row
+      ))
+    })
   }
 
-  const toggleAll = () => {
-    const newVal = !selectAll
-    setSelectAll(newVal)
-    setRows((prev) => prev.map((r) => (r.validationStatus === 'Valid' ? { ...r, selected: newVal } : r)))
+  const toggleAllWells = () => {
+    const selectAll = !allWellsSelected
+    setRows((prev) => prev.map((row) => (
+      row.validationStatus === 'Error' ? row : { ...row, selected: selectAll }
+    )))
+  }
+
+  const toggleRow = (id: string) => {
+    const row = rows.find((item) => item.id === id)
+    if (!row?.wellPosition) return
+    toggleWell(row.wellPosition)
   }
 
   const updateMapping = (key: string, sourceColumn: string) => {
@@ -295,7 +338,7 @@ export function UploadMolecularResultsModal({
     onMappingsChange(synced.map((m) => (m.key === key ? { ...m, sourceColumn } : m)))
   }
 
-  const canContinue = !!uploadData && uploadData.previewRows.length > 0 && !!plateId.trim()
+  const canContinue = !!uploadData && rows.some((row) => row.selected) && !!plateId.trim()
   const plateIdFromFile = !!syncUserMappingsWithFieldDefs(userMappings).find((m) => m.key === 'plateId')?.sourceColumn
 
   return (
@@ -319,7 +362,7 @@ export function UploadMolecularResultsModal({
               </button>
               <button
                 type="button"
-                onClick={onSendResults}
+                onClick={() => onSendResults(rows)}
                 disabled={!canContinue}
                 className="px-4 py-1.5 border border-blue-600 text-blue-600 rounded text-xs font-medium hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed"
               >
@@ -327,7 +370,7 @@ export function UploadMolecularResultsModal({
               </button>
               <button
                 type="button"
-                onClick={onContinue}
+                onClick={() => onContinue(rows)}
                 disabled={!canContinue}
                 className="px-4 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
               >
@@ -357,7 +400,7 @@ export function UploadMolecularResultsModal({
       />
 
       {!fileContext ? (
-        <FileSelectStep onFileSelect={onFileSelect} parsing={parsing} />
+        <FileSelectStep onFileSelect={onFileSelect} parsing={parsing} error={mappingError} />
       ) : (
         <div className="p-4 space-y-4">
           <div className="flex items-center justify-between gap-3 text-xs bg-emerald-50 border border-emerald-200 rounded px-3 py-2">
@@ -477,20 +520,45 @@ export function UploadMolecularResultsModal({
               <>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs text-slate-600">{rows.length} rows parsed from your file</span>
-                  <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
-                    <input type="checkbox" checked={selectAll} onChange={toggleAll} className="rounded border-slate-300 text-blue-600" />
-                    Select all valid Results
-                  </label>
                 </div>
 
                 <div className="border border-slate-200 rounded overflow-hidden max-h-64 overflow-y-auto">
                   <table className="w-full text-xs">
                     <thead className="sticky top-0">
                       <tr className="bg-slate-700 text-white">
-                        <th className="w-8 px-2 py-1.5"></th>
-                        {PREVIEW_COLUMN_KEYS.map((key) => (
+                        {!wellColumnVisible && (
+                          <th className="w-8 px-2 py-1.5">
+                            <input
+                              type="checkbox"
+                              checked={allWellsSelected}
+                              ref={(input) => {
+                                if (input) input.indeterminate = someWellsSelected && !allWellsSelected
+                              }}
+                              onChange={toggleAllWells}
+                              className="rounded border-slate-300 text-blue-600"
+                              aria-label="Select all wells"
+                            />
+                          </th>
+                        )}
+                        {visiblePreviewColumns.map((key) => (
                           <th key={key} className="px-2 py-1.5 text-left font-medium">
-                            {previewColumnLabel(key)}
+                            {key === 'well' ? (
+                              <label className="flex items-center gap-1.5 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={allWellsSelected}
+                                  ref={(input) => {
+                                    if (input) input.indeterminate = someWellsSelected && !allWellsSelected
+                                  }}
+                                  onChange={toggleAllWells}
+                                  className="rounded border-slate-300 text-blue-600"
+                                  aria-label="Select all wells"
+                                />
+                                <span>{previewColumnLabel(key)}</span>
+                              </label>
+                            ) : (
+                              previewColumnLabel(key)
+                            )}
                           </th>
                         ))}
                       </tr>
@@ -498,14 +566,36 @@ export function UploadMolecularResultsModal({
                     <tbody>
                       {rows.map((row) => (
                         <tr key={row.id} className={`border-b border-slate-100 ${row.validationStatus === 'Error' ? 'bg-red-50/50' : 'hover:bg-slate-50'}`}>
-                          <td className="px-2 py-1.5">
-                            {row.validationStatus !== 'Error' && (
-                              <input type="checkbox" checked={row.selected} onChange={() => toggleRow(row.id)} className="rounded border-slate-300 text-blue-600" />
-                            )}
-                          </td>
-                          {PREVIEW_COLUMN_KEYS.map((key) => (
+                          {!wellColumnVisible && (
+                            <td className="px-2 py-1.5">
+                              {row.validationStatus !== 'Error' && (
+                                <input
+                                  type="checkbox"
+                                  checked={row.selected}
+                                  onChange={() => toggleRow(row.id)}
+                                  className="rounded border-slate-300 text-blue-600"
+                                />
+                              )}
+                            </td>
+                          )}
+                          {visiblePreviewColumns.map((key) => (
                             <td key={key} className="px-2 py-1.5 text-slate-600">
-                              {renderPreviewCell(row, key)}
+                              {key === 'well' ? (
+                                <div className="flex items-center gap-1.5">
+                                  {row.validationStatus !== 'Error' && (
+                                    <input
+                                      type="checkbox"
+                                      checked={row.selected}
+                                      onChange={() => toggleWell(row.wellPosition)}
+                                      className="rounded border-slate-300 text-blue-600"
+                                      aria-label={`Select well ${row.wellPosition}`}
+                                    />
+                                  )}
+                                  <span>{renderPreviewCell(row, key)}</span>
+                                </div>
+                              ) : (
+                                renderPreviewCell(row, key)
+                              )}
                             </td>
                           ))}
                         </tr>

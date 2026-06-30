@@ -10,7 +10,7 @@ export type ValidationStatus = 'Valid' | 'Error' | 'Warning'
 export type WellQcStatus = 'QC Passed' | 'QC Warning' | 'QC Failed'
 export type SampleStatus = 'Ready' | 'Ready for Release' | 'Failed' | 'Needs Review'
 export type WellStatus = 'ready' | 'review' | 'failed' | 'control' | 'empty'
-export type Interpretation = 'Detected' | 'Not Detected' | 'Passed'
+export type Interpretation = 'Detected' | 'Not Detected' | 'Passed' | 'Inconclusive'
 export type TargetType = 'Organism' | 'Gene' | 'Control'
 
 export interface PreviewRow {
@@ -39,6 +39,7 @@ export interface ResultRow {
   targetName: string
   ctValue: number | string
   interpretation: Interpretation
+  interpretationValue?: string
   ampStatus?: string
   type: TargetType
   resistantAntibiotics: string
@@ -150,6 +151,15 @@ export type MappingTargetKey =
   | 'ampStatus'
   | 'viralLoad'
   | 'plateId'
+  | 'thresholdValue'
+  | 'reporterDye'
+  | 'cqConfidence'
+
+export interface MappedTargetMetrics {
+  thresholdValue: boolean
+  reporterDye: boolean
+  cqConfidence: boolean
+}
 
 export interface UserFieldMapping {
   key: MappingTargetKey
@@ -230,6 +240,11 @@ export interface ParsedUploadData {
   activityLog: ActivityLogEntry[]
   qcBanner: QcBanner
   plateViewReadiness: PlateViewReadiness
+  mappedTargetMetrics: MappedTargetMetrics
+  /** Original parsed rows — used to rebuild validation after well selection. */
+  sourceRecords: import('../utils/parseMolecularFile').RawMolecularRow[]
+  defaultPanel: string
+  plateSize: PlateSize
 }
 
 export type Screen = 'home' | 'validation'

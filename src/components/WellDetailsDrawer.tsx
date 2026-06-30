@@ -1,10 +1,11 @@
 import { Badge } from './ui/Badge'
 import { displayTargetInterpretation } from '../utils/interpretation'
-import type { WellAdditionalMetrics, WellControlValidation, WellData, WellQcStatus, WellTargetRow } from '../types'
+import type { WellAdditionalMetrics, WellControlValidation, WellData, WellQcStatus, WellTargetRow, MappedTargetMetrics } from '../types'
 
 interface WellDetailsPanelProps {
   well: WellData
   controlValidations: WellControlValidation[]
+  mappedTargetMetrics: MappedTargetMetrics
   onClose: () => void
 }
 
@@ -56,16 +57,6 @@ function formatResultValue(value: number | string) {
   return String(value)
 }
 
-function hasAdditionalMetrics(metrics: WellAdditionalMetrics): boolean {
-  return Boolean(
-    metrics.ampStatus
-    || metrics.ampScore
-    || metrics.cqConfidence
-    || metrics.reporterDye
-    || metrics.thresholdValue,
-  )
-}
-
 function interpretationClassName(interpretation: ReturnType<typeof displayTargetInterpretation>): string {
   if (interpretation === 'Detected') return 'text-red-600 font-medium'
   if (interpretation === 'Not Detected') return 'text-emerald-600 font-medium'
@@ -73,31 +64,51 @@ function interpretationClassName(interpretation: ReturnType<typeof displayTarget
   return 'text-slate-800'
 }
 
-function TargetMetricsGrid({ metrics }: { metrics: WellAdditionalMetrics }) {
+function TargetMetricsGrid({
+  metrics,
+  mappedTargetMetrics,
+}: {
+  metrics: WellAdditionalMetrics
+  mappedTargetMetrics: MappedTargetMetrics
+}) {
   const rows = [
-    { label: 'Amp Status', value: metrics.ampStatus },
-    { label: 'Amp Score', value: metrics.ampScore },
-    { label: 'Cq Confidence', value: metrics.cqConfidence },
-    { label: 'Reporter Dye', value: metrics.reporterDye },
-    { label: 'Threshold Value', value: metrics.thresholdValue },
-  ].filter((row) => row.value)
-
-  if (rows.length === 0) return null
+    ...(metrics.ampStatus ? [{ label: 'Amp Status', value: metrics.ampStatus }] : []),
+    ...(metrics.ampScore ? [{ label: 'Amp Score', value: metrics.ampScore }] : []),
+    {
+      label: 'Cq Confidence',
+      value: mappedTargetMetrics.cqConfidence ? (metrics.cqConfidence?.trim() || '—') : 'NA',
+    },
+    {
+      label: 'Reporter Dye',
+      value: mappedTargetMetrics.reporterDye ? (metrics.reporterDye?.trim() || '—') : 'NA',
+    },
+    {
+      label: 'Threshold Value',
+      value: mappedTargetMetrics.thresholdValue ? (metrics.thresholdValue?.trim() || '—') : 'NA',
+    },
+  ]
 
   return (
     <div className="border-t border-slate-200 bg-slate-50 px-2.5 py-2">
       <div className="text-[10px] font-medium text-slate-500 uppercase tracking-wide mb-2">Additional Metrics</div>
       <div className="grid grid-cols-2 gap-x-3 gap-y-2">
         {rows.map((row) => (
-          <Field key={row.label} label={row.label} value={row.value ?? ''} />
+          <Field key={row.label} label={row.label} value={row.value} />
         ))}
       </div>
     </div>
   )
 }
 
-function TargetCard({ row }: { row: WellTargetRow }) {
+function TargetCard({
+  row,
+  mappedTargetMetrics,
+}: {
+  row: WellTargetRow
+  mappedTargetMetrics: MappedTargetMetrics
+}) {
   const interpretation = displayTargetInterpretation(row.interpretation, row.additionalMetrics?.ampStatus)
+  const metrics = row.additionalMetrics ?? {}
 
   return (
     <div className="border border-slate-200 rounded overflow-hidden">
@@ -113,9 +124,7 @@ function TargetCard({ row }: { row: WellTargetRow }) {
           </div>
         </div>
       </div>
-      {row.additionalMetrics && hasAdditionalMetrics(row.additionalMetrics) && (
-        <TargetMetricsGrid metrics={row.additionalMetrics} />
-      )}
+      <TargetMetricsGrid metrics={metrics} mappedTargetMetrics={mappedTargetMetrics} />
     </div>
   )
 }
@@ -153,7 +162,7 @@ function WellInformationSection({ well, isControl }: { well: WellData; isControl
   )
 }
 
-export function WellDetailsPanel({ well, controlValidations, onClose }: WellDetailsPanelProps) {
+export function WellDetailsPanel({ well, controlValidations, mappedTargetMetrics, onClose }: WellDetailsPanelProps) {
   const isControl = well.isQc || well.status === 'control'
   const qcBadge = wellQcBadge(well, isControl)
 
@@ -185,7 +194,7 @@ export function WellDetailsPanel({ well, controlValidations, onClose }: WellDeta
           <Section title="Target Information">
             <div className="space-y-2">
               {well.targetRows.map((row) => (
-                <TargetCard key={row.target} row={row} />
+                <TargetCard key={row.target} row={row} mappedTargetMetrics={mappedTargetMetrics} />
               ))}
             </div>
           </Section>

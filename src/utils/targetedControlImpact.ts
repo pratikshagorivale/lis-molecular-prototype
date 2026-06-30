@@ -75,10 +75,12 @@ export function computeAffectedTargetsFromFailedTargetedControls(
   return affected
 }
 
-function isSampleWell(well: Pick<WellData, 'status' | 'isQc' | 'panel' | 'qcType' | 'sampleId'>): boolean {
+export function isSampleWell(
+  well: Pick<WellData, 'status' | 'isQc' | 'panel' | 'qcType' | 'sampleId'>,
+): boolean {
   if (well.status === 'empty') return false
   if (well.isQc || well.panel === 'Control' || !!well.qcType) return false
-  if (/^(PC|NC|NTC|IC)$/i.test(well.sampleId?.trim() || '')) return false
+  if (/^(PC|NC|NTC|IC)\b/i.test(well.sampleId?.trim() || '')) return false
   return true
 }
 

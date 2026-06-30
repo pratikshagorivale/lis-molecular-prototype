@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Badge } from './ui/Badge'
-import { formatInterpretationDisplay } from '../utils/interpretation'
+import { displayTargetInterpretation, formatInterpretationDisplay, interpretationDisplayClassName } from '../utils/interpretation'
 import type { ResultRow, SampleGroup, WellData } from '../types'
 
 interface TableViewProps {
@@ -182,8 +182,8 @@ export function TableView({ groups, plateWells, onWellOpen, searchQuery }: Table
                       <td className="px-2 py-1.5 text-slate-700">{row.targetName}</td>
                       <td className="px-2 py-1.5 text-slate-600">{row.ctValue}</td>
                       <td className="px-2 py-1.5">
-                        <span className={row.interpretation === 'Detected' ? 'text-red-600 font-medium' : 'text-slate-500'}>
-                          {formatInterpretationDisplay(row.interpretation, row.ampStatus)}
+                        <span className={interpretationDisplayClassName(displayTargetInterpretation(row.interpretation, row.ampStatus))}>
+                          {formatInterpretationDisplay(row.interpretation, { interpretationValue: row.interpretationValue })}
                         </span>
                       </td>
                       <td className="px-2 py-1.5 text-slate-600">{row.type}</td>

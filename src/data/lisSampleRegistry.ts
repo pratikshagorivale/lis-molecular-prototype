@@ -35,6 +35,7 @@ export function isControlSample(sampleId: string): boolean {
   const id = sampleId.trim().toUpperCase()
   return ['PC', 'NC', 'NTC', 'POS', 'NEG', 'POSITIVE CONTROL', 'NEGATIVE CONTROL'].includes(id)
     || id.includes('CONTROL')
+    || /^(PC|NC|NTC|IC)\b/.test(id)
 }
 
 export function isUnknownSample(sampleId: string): boolean {

@@ -32,10 +32,10 @@ export function isQcFlag(value: unknown): boolean {
 export function parseQcType(value: unknown): string {
   const v = String(value ?? '').trim().toUpperCase()
   if (!v) return ''
-  if (/^PC$|POS|POSITIVE/.test(v)) return 'PC'
-  if (/^NC$|NEG|NEGATIVE/.test(v)) return 'NC'
-  if (/NTC|NO TEMPLATE/.test(v)) return 'NTC'
-  if (/^IC$|INTERNAL/.test(v)) return 'IC'
+  if (/^PC\b|^PC$|POS|POSITIVE/.test(v)) return 'PC'
+  if (/^NC\b|^NC$|NEG|NEGATIVE/.test(v)) return 'NC'
+  if (/^NTC\b|NTC|NO TEMPLATE/.test(v)) return 'NTC'
+  if (/^IC\b|^IC$|INTERNAL/.test(v)) return 'IC'
   if (v === 'QC' || v.includes('CONTROL')) return v.includes('POSITIVE') ? 'PC' : v.includes('NEGATIVE') ? 'NC' : 'QC'
   return v
 }
@@ -45,6 +45,17 @@ export function isControlRecord(row: Pick<RawMolecularRow, 'sampleId' | 'isQc' |
   if (row.qcType && isQcFlag(row.qcType)) return true
   if (row.qcType && ['PC', 'NC', 'NTC', 'IC', 'QC'].includes(row.qcType.toUpperCase())) return true
   return isControlSample(row.sampleId)
+}
+
+/** Sample IDs like "PC E", "NC KP" — per-target controls in the results file. */
+export function isPlateStyleControlId(sampleId: string): boolean {
+  return /^(PC|NC|NTC|IC)$/i.test(sampleId.trim())
+}
+
+export function isTargetStyleControlId(sampleId: string): boolean {
+  const trimmed = sampleId.trim()
+  if (!/^(PC|NC|NTC|IC)\b/i.test(trimmed)) return false
+  return !isPlateStyleControlId(trimmed)
 }
 
 export function controlLabel(row: Pick<RawMolecularRow, 'qcType' | 'sampleId' | 'target'>): string {
@@ -70,12 +81,12 @@ export function classifyControlType(
     return 'NTC'
   }
   if (
-    qc === 'PC' || /^POS/.test(qc) || sample === 'PC'
+    qc === 'PC' || /^POS/.test(qc) || sample === 'PC' || /^PC\b/.test(sample)
     || (isControl && (/POSITIVE CONTROL/.test(target) || /^PC[-/]/.test(target)))
   ) {
     return 'PC'
   }
-  if (qc === 'NC' || /^NEG/.test(qc) || sample === 'NC' || (isControl && /NEGATIVE CONTROL/.test(target))) {
+  if (qc === 'NC' || /^NEG/.test(qc) || sample === 'NC' || /^NC\b/.test(sample) || (isControl && /NEGATIVE CONTROL/.test(target))) {
     return 'NC'
   }
   return null
@@ -209,7 +220,7 @@ export function isPlateControlWell(
     || well.isQc
     || well.panel === 'Control'
     || !!well.qcType
-    || /^(PC|NC|NTC|IC)$/i.test(well.sampleId?.trim() || '')
+    || /^(PC|NC|NTC|IC)\b/i.test(well.sampleId?.trim() || '')
   )
 }
 
@@ -231,7 +242,10 @@ const CONTROL_TYPE_TO_CONFIG: Record<ControlType, InstrumentControlConfig['contr
 
 function controlTypeFromId(control: string): ControlType | null {
   const id = control.trim().toUpperCase()
-  if (id === 'PC' || id === 'NC' || id === 'NTC' || id === 'IC') return id
+  if (/^PC\b/.test(id) || id === 'PC') return 'PC'
+  if (/^NC\b/.test(id) || id === 'NC') return 'NC'
+  if (/^NTC\b/.test(id) || id === 'NTC') return 'NTC'
+  if (/^IC\b/.test(id) || id === 'IC') return 'IC'
   return null
 }
 
@@ -251,7 +265,8 @@ export function aggregateControlValidationsByType(
   const groups = new Map<string, WellControlValidation[]>()
 
   for (const row of validations) {
-    const key = row.control.trim().toUpperCase()
+    const type = controlTypeFromId(row.control)
+    const key = type ?? row.control.trim().toUpperCase()
     const list = groups.get(key) ?? []
     list.push(row)
     groups.set(key, list)
@@ -259,7 +274,7 @@ export function aggregateControlValidationsByType(
 
   return [...groups.entries()]
     .map(([, rows]) => ({
-      control: rows[0].control,
+      control: controlTypeFromId(rows[0].control) ?? rows[0].control,
       position: rows
         .map((r) => r.position)
         .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))

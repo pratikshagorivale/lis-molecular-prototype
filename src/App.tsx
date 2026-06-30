@@ -18,11 +18,11 @@ import {
   readSpreadsheetFile,
   buildUploadDataFromContext,
   createAutoMappings,
-  mappingsNeedSync,
   mappingsReadyForPreview,
   syncUserMappingsWithFieldDefs,
   updateFileContextRowSettings,
 } from './utils/parseMolecularFile'
+import { filterUploadDataBySelection } from './utils/filterUploadBySelection'
 import { countReleaseableSamples } from './utils/releaseSamples'
 import type {
   AppNav,
@@ -31,6 +31,7 @@ import type {
   ManagedInstrument,
   ParsedUploadData,
   PlateSize,
+  PreviewRow,
   QcView,
   Screen,
   UserFieldMapping,
@@ -104,24 +105,28 @@ function App() {
   useEffect(() => {
     if (!fileContext || userMappings.length === 0 || !mappingsReadyForPreview(userMappings)) return
     applyMappings(fileContext, userMappings)
-  }, [molecularControlsKey, fileContext, userMappings, applyMappings])
+    // Re-apply when instrument control config changes, not on every mapping update.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [molecularControlsKey])
 
   const processFile = useCallback(async (file: File) => {
     setParsing(true)
     setMappingError(null)
-    setUploadData(null)
     try {
       const context = await readSpreadsheetFile(file)
       const cols = context.sourceColumns
       const headers = cols.map((h) => normalizeHeaderForMapping(h))
-      const mappings = createAutoMappings(headers, cols)
+      const mappings = syncUserMappingsWithFieldDefs(createAutoMappings(headers, cols))
 
+      setUploadData(null)
       setFileContext(context)
       setUserMappings(mappings)
       setPlateIdInput(context.metadata.plateId)
       await applyMappings(context, mappings, { plateIdOverride: context.metadata.plateId })
     } catch (err) {
-      setToast(err instanceof Error ? err.message : 'Failed to read file')
+      const message = err instanceof Error ? err.message : 'Failed to read file'
+      setMappingError(message)
+      setToast(message)
     } finally {
       setParsing(false)
     }
@@ -129,13 +134,19 @@ function App() {
 
   const handleUploadClick = useCallback(() => {
     setFileContext(null)
-    setUploadData(null)
     setUserMappings([])
     setMappingError(null)
     setPlateIdInput('')
     setPlateSize(96)
+    setScreen('home')
     setUploadModalOpen(true)
   }, [])
+
+  useEffect(() => {
+    if (screen === 'validation' && !uploadData) {
+      setScreen('home')
+    }
+  }, [screen, uploadData])
 
   const handleApplyMappings = useCallback(() => {
     if (fileContext) applyMappings(fileContext, userMappings)
@@ -153,20 +164,11 @@ function App() {
     }
   }, [fileContext, applyMappings])
 
-  useEffect(() => {
-    if (!fileContext || userMappings.length === 0 || !mappingsNeedSync(userMappings)) return
-    const synced = syncUserMappingsWithFieldDefs(userMappings)
-    setUserMappings(synced)
-    if (mappingsReadyForPreview(synced)) {
-      applyMappings(fileContext, synced)
-    }
-  }, [fileContext, userMappings, applyMappings])
-
   const handleHeaderRowChange = useCallback((headerRow: number) => {
     if (!fileContext) return
     const updated = updateFileContextRowSettings(fileContext, { headerRow })
     const headers = updated.sourceColumns.map((h) => normalizeHeaderForMapping(h))
-    const mappings = createAutoMappings(headers, updated.sourceColumns)
+    const mappings = syncUserMappingsWithFieldDefs(createAutoMappings(headers, updated.sourceColumns))
     setFileContext(updated)
     setUserMappings(mappings)
     applyMappings(updated, mappings)
@@ -222,23 +224,25 @@ function App() {
     setToast('Selected results released successfully.')
   }, [releaseMode, releaseCounts])
 
-  const handleContinueToValidation = useCallback(() => {
+  const handleContinueToValidation = useCallback((selectionRows: PreviewRow[]) => {
     if (!uploadData) return
+    setUploadData(filterUploadDataBySelection(uploadData, selectionRows, { instrumentControls: molecularControls }))
     setUploadModalOpen(false)
     setScreen('validation')
-  }, [uploadData])
+  }, [uploadData, molecularControls])
 
-  const handleSendResults = useCallback(() => {
+  const handleSendResults = useCallback((selectionRows: PreviewRow[]) => {
     if (!uploadData) return
-    const entry = resolveWaitingEntryForUpload(uploadData, partiallyCompletedEntries)
-    const report = buildMolecularReportFromUpload(entry, uploadData.previewRows)
+    const filtered = filterUploadDataBySelection(uploadData, selectionRows, { instrumentControls: molecularControls })
+    const entry = resolveWaitingEntryForUpload(filtered, partiallyCompletedEntries)
+    const report = buildMolecularReportFromUpload(entry, filtered.previewRows)
     setReportResultsCache((prev) => ({ ...prev, [entry.id]: report }))
     setSelectedWaitingEntry(entry)
     setWaitingView('report')
     setActiveNav('waiting')
     setUploadModalOpen(false)
     setToast(`Results sent to report entry for ${entry.patientName}.`)
-  }, [uploadData])
+  }, [uploadData, molecularControls])
 
   const handleCloseModal = useCallback(() => {
     setUploadModalOpen(false)
@@ -305,6 +309,7 @@ function App() {
           instrumentControls={managedInstruments.find((i) => i.isMolecular)?.controls ?? []}
           onCloseWell={() => setSelectedWell(null)}
           onBack={() => setScreen('home')}
+          onUploadNew={handleUploadClick}
           onWellClick={handleWellClick}
           onReleasePlate={handleReleasePlate}
           onReleaseValidOnly={handleReleaseValidOnly}

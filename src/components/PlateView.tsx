@@ -75,8 +75,8 @@ function targetDotStates(well: WellData): TargetDotState[] {
   if (well.ctValues.length > 0) {
     return well.ctValues.flatMap((cv) => {
       if (cv.interpretation === 'Passed') return []
-      if (isInconclusiveAmpStatus(cv.ampStatus)) return ['inconclusive']
-      if (isPositiveResult(cv.interpretation, cv.ampStatus, cv.ct)) return ['detected']
+      if (cv.interpretation === 'Inconclusive' || isInconclusiveAmpStatus(cv.ampStatus)) return ['inconclusive']
+      if (isPositiveResult(cv.interpretation)) return ['detected']
       return ['notDetected']
     })
   }

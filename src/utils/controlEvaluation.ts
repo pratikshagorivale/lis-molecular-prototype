@@ -7,6 +7,7 @@ import {
   isControlDetected,
   isControlNotDetected,
   isControlRecord,
+  isTargetStyleControlId,
   type ControlType,
 } from './qcDetection'
 import { isInconclusiveAmpStatus } from './interpretation'
@@ -50,8 +51,42 @@ function resolveWellControlType(rows: RawMolecularRow[]): ControlType | null {
   return null
 }
 
+function wellSampleId(rows: RawMolecularRow[]): string {
+  return (rows.find((r) => r.sampleId.trim())?.sampleId ?? rows[0]?.sampleId ?? '').trim()
+}
+
+function expectedStatusForControlType(
+  type: ControlType,
+  config: InstrumentControlConfig,
+): AmpStatusOption {
+  if (config.status) return config.status
+  if (type === 'PC' || type === 'IC') return 'Detected'
+  return 'Not Detected'
+}
+
+function targetStyleWellPasses(
+  rows: RawMolecularRow[],
+  config: InstrumentControlConfig,
+): boolean {
+  const type = resolveWellControlType(rows)
+  if (!type) return false
+
+  const expected = expectedStatusForControlType(type, config)
+  const dataRows = rows.filter((r) => r.target?.trim())
+  if (dataRows.length === 0) return false
+
+  return dataRows.every((r) => rowPassesControlCriteria(r, expected, config.expectedResultCtCutOff))
+}
+
 function controlNamesMatch(wellName: string, configName: string): boolean {
-  return wellName.trim().toUpperCase() === configName.trim().toUpperCase()
+  const well = wellName.trim().toUpperCase()
+  const config = configName.trim().toUpperCase()
+  if (well === config) return true
+  if (config === 'PC' && /^PC\b/.test(well)) return true
+  if (config === 'NC' && /^NC\b/.test(well)) return true
+  if (config === 'NTC' && /^NTC\b/.test(well)) return true
+  if (config === 'IC' && /^IC\b/.test(well)) return true
+  return false
 }
 
 export function findControlConfigForWell(
@@ -125,6 +160,10 @@ export function wellPassesConfiguredControl(
   const enriched = enrichWellControlRows(rows)
   if (!enriched.some((r) => isControlRecord(r))) return false
 
+  if (isTargetStyleControlId(wellSampleId(enriched))) {
+    return targetStyleWellPasses(enriched, config)
+  }
+
   if (config.scope === 'targeted' && config.targets?.length) {
     for (const targetConfig of config.targets) {
       const expanded = expandInstrumentTargetName(targetConfig.target, catalogTargets)
@@ -189,6 +228,22 @@ export function isControlTypeConfigured(
   instrumentControls: InstrumentControlConfig[],
 ): boolean {
   return instrumentControls.some((config) => controlTypeForConfig(config) === type)
+}
+
+export function shouldInvalidateAllSamplesOnControlFailure(
+  records: RawMolecularRow[],
+  failedControlWells: { wellId: string }[],
+  instrumentControls: InstrumentControlConfig[],
+  catalogTargets: string[] = [],
+): boolean {
+  if (failedControlWells.length === 0) return false
+
+  if (instrumentControls.length === 0) {
+    return failedControlWells.length > 0
+  }
+
+  const failures = getConfiguredFailedControlWells(records, instrumentControls, catalogTargets)
+  return failures.some((failure) => controlFailureFailsPlate(failure.config))
 }
 
 export function getConfiguredFailedControlWells(

@@ -1,10 +1,10 @@
 import * as XLSX from 'xlsx'
 import { buildValidationData } from '../data/buildValidationData'
 import { loadLisRegistry } from '../data/lisSampleRegistry'
-import { normalizeAmpStatusCell, parseInterpretation } from './interpretation'
+import { normalizeAmpStatusCell, resolveRowInterpretation } from './interpretation'
 import { isControlRecord, isQcFlag, parseQcType } from './qcDetection'
 import { combineRowCol, normalizeWell } from './wellPosition'
-import type { FieldMapping, FileParseContext, InstrumentControlConfig, Interpretation, MappingTargetKey, ParsedUploadData, PlateSize, PlateViewReadiness, TargetType, UserFieldMapping } from '../types'
+import type { FieldMapping, FileParseContext, InstrumentControlConfig, Interpretation, MappedTargetMetrics, MappingTargetKey, ParsedUploadData, PlateSize, PlateViewReadiness, TargetType, UserFieldMapping } from '../types'
 
 export interface RawMolecularRow {
   well: string
@@ -38,6 +38,9 @@ export const MAPPING_FIELD_DEFS: { key: MappingTargetKey; label: string; require
   { key: 'ampStatus', label: 'Amp Status', required: false },
   { key: 'viralLoad', label: 'Viral Load', required: false },
   { key: 'plateId', label: 'Plate ID', required: false },
+  { key: 'thresholdValue', label: 'Threshold Value', required: false },
+  { key: 'reporterDye', label: 'Reporter Dye', required: false },
+  { key: 'cqConfidence', label: 'Cq Confidence', required: false },
 ]
 
 const COLUMN_ALIASES: Record<MappingTargetKey, string[]> = {
@@ -55,17 +58,17 @@ const COLUMN_ALIASES: Record<MappingTargetKey, string[]> = {
   ],
   viralLoad: ['viral load', 'viralload', 'vl', 'copies', 'copies/ml', 'iu/ml', 'log copies'],
   plateId: ['plate', 'plate id', 'plate_id', 'plateid'],
+  thresholdValue: ['threshold value', 'threshold', 'auto threshold'],
+  reporterDye: ['reporter dye', 'reporter', 'fluorophore', 'dye'],
+  cqConfidence: ['cq confidence', 'ct confidence', 'confidence', 'cq conf'],
 }
 
 type AutoColumnKey = 'testOrder' | 'isQc' | 'qcType' | 'type' | 'patient' | 'panel'
-type OptionalMetricKey = 'accessionNumber' | 'ampScore' | 'cqConfidence' | 'reporterDye' | 'thresholdValue'
+type AutoMetricKey = 'accessionNumber' | 'ampScore'
 
-const OPTIONAL_METRIC_ALIASES: Record<OptionalMetricKey, string[]> = {
+const AUTO_METRIC_ALIASES: Record<AutoMetricKey, string[]> = {
   accessionNumber: ['accession number', 'accession no', 'accession #', 'accession id', 'accession'],
   ampScore: ['amp score', 'amplification score', 'amp_score'],
-  cqConfidence: ['cq confidence', 'ct confidence', 'confidence', 'cq conf'],
-  reporterDye: ['reporter dye', 'reporter', 'fluorophore', 'dye'],
-  thresholdValue: ['threshold value', 'threshold', 'auto threshold'],
 }
 
 const AUTO_COLUMN_ALIASES: Record<AutoColumnKey, string[]> = {
@@ -215,6 +218,15 @@ export function mappingsNeedSync(mappings: UserFieldMapping[]): boolean {
     const existing = byKey.get(def.key)
     return !existing || existing.label !== def.label || existing.required !== def.required
   })
+}
+
+export function buildMappedTargetMetrics(mappings: UserFieldMapping[]): MappedTargetMetrics {
+  const byKey = new Map(mappings.map((mapping) => [mapping.key, mapping]))
+  return {
+    thresholdValue: !!byKey.get('thresholdValue')?.sourceColumn,
+    reporterDye: !!byKey.get('reporterDye')?.sourceColumn,
+    cqConfidence: !!byKey.get('cqConfidence')?.sourceColumn,
+  }
 }
 
 export function syncUserMappingsWithFieldDefs(mappings: UserFieldMapping[]): UserFieldMapping[] {
@@ -399,19 +411,6 @@ function getColumnIndex(userMappings: UserFieldMapping[], key: MappingTargetKey,
   return findColumnByName(headers, sourceColumns, mapping.sourceColumn)
 }
 
-function resolveInterpretationColumnIndex(
-  mappedIdx: number,
-  headers: string[],
-): number {
-  if (mappedIdx >= 0) return mappedIdx
-  const patterns = ['interpretation', 'call', 'result interpretation', 'qualitative', 'detection call']
-  for (const pattern of patterns) {
-    const idx = headers.findIndex((h) => h === pattern || h.includes(pattern))
-    if (idx >= 0) return idx
-  }
-  return -1
-}
-
 function resolveAmpStatusColumnIndex(
   mappedIdx: number,
   headers: string[],
@@ -439,18 +438,22 @@ export function recordsFromMappings(
   const targetIdx = getColumnIndex(userMappings, 'target', headers, sourceColumns)
   const resultIdx = getColumnIndex(userMappings, 'result', headers, sourceColumns)
   const viralLoadIdx = getColumnIndex(userMappings, 'viralLoad', headers, sourceColumns)
-  const interpretationIdx = resolveInterpretationColumnIndex(
-    getColumnIndex(userMappings, 'interpretation', headers, sourceColumns),
-    headers,
-  )
+  const interpretationUserIdx = getColumnIndex(userMappings, 'interpretation', headers, sourceColumns)
+  const interpretationMapped = interpretationUserIdx >= 0
   const ampStatusIdx = resolveAmpStatusColumnIndex(
     getColumnIndex(userMappings, 'ampStatus', headers, sourceColumns),
     headers,
   )
   const plateIdx = getColumnIndex(userMappings, 'plateId', headers, sourceColumns)
+  const thresholdValueIdx = getColumnIndex(userMappings, 'thresholdValue', headers, sourceColumns)
+  const reporterDyeIdx = getColumnIndex(userMappings, 'reporterDye', headers, sourceColumns)
+  const cqConfidenceIdx = getColumnIndex(userMappings, 'cqConfidence', headers, sourceColumns)
 
   const autoExclude = new Set(
-    [wellIdx, sampleIdx, targetIdx, resultIdx, viralLoadIdx, interpretationIdx, ampStatusIdx, plateIdx].filter((i) => i >= 0),
+    [
+      wellIdx, sampleIdx, targetIdx, resultIdx, viralLoadIdx, interpretationUserIdx, ampStatusIdx, plateIdx,
+      thresholdValueIdx, reporterDyeIdx, cqConfidenceIdx,
+    ].filter((i) => i >= 0),
   )
   const patientIdx = findAutoColumnIndex(headers, 'patient', autoExclude)
   if (patientIdx >= 0) autoExclude.add(patientIdx)
@@ -463,9 +466,9 @@ export function recordsFromMappings(
   const qcTypeIdx = findAutoColumnIndex(headers, 'qcType', autoExclude)
   if (qcTypeIdx >= 0) autoExclude.add(qcTypeIdx)
   const typeIdx = findAutoColumnIndex(headers, 'type', autoExclude)
-  const metricIdx: Partial<Record<OptionalMetricKey, number>> = {}
-  for (const key of Object.keys(OPTIONAL_METRIC_ALIASES) as OptionalMetricKey[]) {
-    const idx = findColumnByAliases(headers, OPTIONAL_METRIC_ALIASES[key], autoExclude)
+  const metricIdx: Partial<Record<AutoMetricKey, number>> = {}
+  for (const key of Object.keys(AUTO_METRIC_ALIASES) as AutoMetricKey[]) {
+    const idx = findColumnByAliases(headers, AUTO_METRIC_ALIASES[key], autoExclude)
     if (idx >= 0) {
       metricIdx[key] = idx
       autoExclude.add(idx)
@@ -496,15 +499,18 @@ export function recordsFromMappings(
     const isQcRaw = isQcIdx >= 0 ? row[isQcIdx] : ''
     const qcTypeRaw = qcTypeIdx >= 0 ? row[qcTypeIdx] : ''
     let qcType = parseQcType(qcTypeRaw)
-    const isQc = isQcFlag(isQcRaw) || (!!qcType && ['PC', 'NC', 'NTC', 'IC', 'QC'].includes(qcType))
+    let isQc = isQcFlag(isQcRaw) || (!!qcType && ['PC', 'NC', 'NTC', 'IC', 'QC'].includes(qcType))
 
     let sampleId = resolveSampleId(row, sampleIdx, headers)
     const target = String(row[targetIdx] ?? '').trim()
     if (!target) continue
 
-    if (isQc && sampleId) {
+    if (sampleId) {
       const typeFromSample = parseQcType(sampleId)
-      if (typeFromSample && typeFromSample !== 'QC' && (!qcType || qcType === 'QC')) {
+      if (!isQc && typeFromSample && ['PC', 'NC', 'NTC', 'IC'].includes(typeFromSample)) {
+        isQc = true
+        qcType = typeFromSample
+      } else if (isQc && typeFromSample && typeFromSample !== 'QC' && (!qcType || qcType === 'QC')) {
         qcType = typeFromSample
       }
     }
@@ -521,7 +527,9 @@ export function recordsFromMappings(
     const ctRaw = row[resultIdx]
     const ct = ctRaw === '' || ctRaw == null ? '-' : (typeof ctRaw === 'number' ? ctRaw : String(ctRaw).trim())
     const viralLoad = viralLoadIdx >= 0 ? String(row[viralLoadIdx] ?? '').trim() : ''
-    const interpretationColRaw = interpretationIdx >= 0 ? normalizeAmpStatusCell(row[interpretationIdx]) : ''
+    const interpretationColRaw = interpretationMapped
+      ? normalizeAmpStatusCell(row[interpretationUserIdx])
+      : ''
     const ampStatusColRaw = ampStatusIdx >= 0 ? normalizeAmpStatusCell(row[ampStatusIdx]) : ''
     const ampStatus = ampStatusColRaw.trim()
     const typeRaw = typeIdx >= 0 ? String(row[typeIdx] ?? '') : ''
@@ -529,6 +537,13 @@ export function recordsFromMappings(
       ? String(row[plateIdx] ?? '').trim() || context.metadata.plateId
       : context.metadata.plateId
     const accessionNumber = readOptionalMetric(row, metricIdx.accessionNumber) || testOrder
+
+    const { interpretation, interpretationValue } = resolveRowInterpretation(ct, {
+      mappedRaw: interpretationColRaw,
+      interpretationMapped,
+      isQc,
+      target,
+    })
 
     records.push({
       well,
@@ -542,15 +557,15 @@ export function recordsFromMappings(
       ct,
       viralLoad,
       ampStatus,
-      interpretationValue: interpretationColRaw || undefined,
-      interpretation: parseInterpretation(interpretationColRaw || ampStatusColRaw, ct, { isQc }),
+      interpretationValue,
+      interpretation,
       type: isQc ? 'Control' : inferType(target, typeRaw),
       plateId,
       accessionNumber: isQc ? '' : accessionNumber,
       ampScore: readOptionalMetric(row, metricIdx.ampScore) || undefined,
-      cqConfidence: readOptionalMetric(row, metricIdx.cqConfidence) || undefined,
-      reporterDye: readOptionalMetric(row, metricIdx.reporterDye) || undefined,
-      thresholdValue: readOptionalMetric(row, metricIdx.thresholdValue) || undefined,
+      cqConfidence: cqConfidenceIdx >= 0 ? readOptionalMetric(row, cqConfidenceIdx) || undefined : undefined,
+      reporterDye: reporterDyeIdx >= 0 ? readOptionalMetric(row, reporterDyeIdx) || undefined : undefined,
+      thresholdValue: thresholdValueIdx >= 0 ? readOptionalMetric(row, thresholdValueIdx) || undefined : undefined,
     })
   }
   return propagateWellControlContext(records)
@@ -679,6 +694,7 @@ export async function buildUploadDataFromContext(
     plateSize: options?.plateSize ?? 96,
     instrumentControls: options?.instrumentControls,
     plateViewReadiness,
+    mappedTargetMetrics: buildMappedTargetMetrics(mappings),
    })
 }
 

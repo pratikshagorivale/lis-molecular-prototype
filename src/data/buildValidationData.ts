@@ -1,8 +1,7 @@
 import { isUnknownSample, lookupSample } from './lisSampleRegistry'
-import { isPositiveResult, parseInterpretation } from '../utils/interpretation'
+import { isPositiveResult } from '../utils/interpretation'
 import { controlLabel, evaluatePlateQc, getPlateControlValidations, isControlRecord, isPlateControlWell, type PlateQcEvaluation } from '../utils/qcDetection'
 import {
-  evaluatePlateQcFromConfig,
   findWellsForConfig,
   getConfiguredPlateControlValidations,
 } from '../utils/controlEvaluation'
@@ -29,13 +28,18 @@ import type {
   WellTargetRow,
   PlateSize,
   PlateViewReadiness,
+  MappedTargetMetrics,
 } from '../types'
 import { AVAILABLE_TARGETS } from './instrumentManagementMockData'
+import { isSampleWell } from '../utils/targetedControlImpact'
 import {
-  computeAffectedTargetsFromFailedTargetedControls,
-  normalizeTargetName,
-  wellTestsAffectedTarget,
-} from '../utils/targetedControlImpact'
+  buildFileControlIndex,
+  evaluatePlateQcFromFileControls,
+  isSampleTargetControlPassed,
+  isWellTargetsControlValid,
+  shouldInvalidateAllSamplesFromFileControls,
+} from '../utils/sampleControlValidation'
+import { isSampleValidFromControlResults } from '../utils/controlValidity'
 
 const ROWS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 const COLS = Array.from({ length: 12 }, (_, i) => i + 1)
@@ -61,6 +65,7 @@ interface BuildInput {
   plateSize?: PlateSize
   instrumentControls?: InstrumentControlConfig[]
   plateViewReadiness: PlateViewReadiness
+  mappedTargetMetrics: MappedTargetMetrics
 }
 
 function nowTime(): string {
@@ -229,7 +234,7 @@ function buildPlateWellsFromRecords(
       const ctValues = wellRecords.map((r) => ({
         target: r.target,
         ct: r.ct,
-        interpretation: parseInterpretation(r.ampStatus, r.ct, { isQc: isControl }),
+        interpretation: r.interpretation,
         ampStatus: r.ampStatus || undefined,
       }))
       const validationErrors: string[] = []
@@ -291,21 +296,12 @@ function buildPlateWellsFromRecords(
   return wells
 }
 
-function targetControlPassed(
-  targetName: string,
-  plateQcPassed: boolean,
-  affectedTargets: Set<string>,
-): boolean {
-  if (!plateQcPassed) return false
-  return !affectedTargets.has(normalizeTargetName(targetName))
-}
-
 function buildSampleGroups(
   records: RawMolecularRow[],
   plateId: string,
   defaultPanel: string,
-  qcPassed: boolean,
-  affectedTargets: Set<string>,
+  fileControls: ReturnType<typeof buildFileControlIndex>,
+  invalidateAllSamples = false,
 ): SampleGroup[] {
   const bySample = new Map<string, RawMolecularRow[]>()
   for (const r of records) {
@@ -323,13 +319,16 @@ function buildSampleGroups(
     const genes = rows.filter((r) => r.type === 'Gene' && isPositiveResult(r.interpretation, r.ampStatus, r.ct)).length
     const resultRows: ResultRow[] = rows.map((r) => {
       const abx = GENE_ABX[r.target] ?? {}
-      const controlPassed = targetControlPassed(r.target, qcPassed, affectedTargets)
+      const controlPassed = invalidateAllSamples
+        ? false
+        : isSampleTargetControlPassed(r.target, fileControls)
       return {
         well: r.well,
         plateId,
         targetName: r.target,
         ctValue: r.ct,
         interpretation: r.interpretation,
+        interpretationValue: r.interpretationValue,
         ampStatus: r.ampStatus,
         type: r.type,
         resistantAntibiotics: abx.resistant ?? '-',
@@ -348,8 +347,8 @@ function buildSampleGroups(
       error: status === 'Failed' ? 'Sample not found in LIS' : undefined,
       detectedOrganisms: organisms,
       resistanceGenes: genes,
-      controlsPassed: qcPassed,
-      sampleValid: resultRows.length > 0 && resultRows.every((row) => row.controlPassed),
+      controlsPassed: resultRows.every((row) => row.controlPassed),
+      sampleValid: isSampleValidFromControlResults(resultRows.map((row) => row.controlPassed)),
       selected: false,
       rows: resultRows,
     }
@@ -440,6 +439,7 @@ export function buildValidationData(input: BuildInput): ParsedUploadData {
     plateSize = 96,
     instrumentControls = [],
     plateViewReadiness,
+    mappedTargetMetrics,
   } = input
 
   const wellSampleDup = new Map<string, Set<string>>()
@@ -470,8 +470,9 @@ export function buildValidationData(input: BuildInput): ParsedUploadData {
   }))
 
   const plateQc = instrumentControls.length > 0
-    ? evaluatePlateQcFromConfig(records, instrumentControls, AVAILABLE_TARGETS)
+    ? evaluatePlateQcFromFileControls(records, instrumentControls, AVAILABLE_TARGETS)
     : evaluatePlateQc(records)
+  const fileControls = buildFileControlIndex(records, instrumentControls, AVAILABLE_TARGETS)
   const { plateSummary, validationSummary, qcBanner } = buildSummaries(
     records,
     plateId,
@@ -482,13 +483,17 @@ export function buildValidationData(input: BuildInput): ParsedUploadData {
     instrumentControls,
   )
   const failedControlWellIds = new Set(qcBanner.failedControlWells.map((f) => f.wellId))
-  const affectedTargets = computeAffectedTargetsFromFailedTargetedControls(
-    records,
-    qcBanner.failedControlWells,
+  const invalidateAllSamples = shouldInvalidateAllSamplesFromFileControls(
+    fileControls,
     instrumentControls,
-    AVAILABLE_TARGETS,
   )
-  const sampleGroups = buildSampleGroups(records, plateId, defaultPanel, qcBanner.qcPassed, affectedTargets)
+  const sampleGroups = buildSampleGroups(
+    records,
+    plateId,
+    defaultPanel,
+    fileControls,
+    invalidateAllSamples,
+  )
   const plateWells = buildPlateWellsFromRecords(
     records,
     plateId,
@@ -498,12 +503,15 @@ export function buildValidationData(input: BuildInput): ParsedUploadData {
     plateQc,
     instrumentControls,
   ).map((well) => {
-    const affected = wellTestsAffectedTarget(well, affectedTargets)
+    const wellTargets = well.targetRows.map((row) => row.target).filter(Boolean)
+    const sampleInvalid = isSampleWell(well) && (
+      invalidateAllSamples || !isWellTargetsControlValid(wellTargets, fileControls)
+    )
     let qcStatus = well.qcStatus
 
     if (isPlateControlWell(well)) {
       qcStatus = well.controlFailed ? 'QC Failed' : 'QC Passed'
-    } else if (affected) {
+    } else if (sampleInvalid) {
       qcStatus = 'QC Failed'
     } else if (well.qcStatus === 'QC Failed') {
       qcStatus = 'QC Passed'
@@ -511,8 +519,14 @@ export function buildValidationData(input: BuildInput): ParsedUploadData {
 
     return {
       ...well,
-      affectedByTargetedControlFailure: affected,
+      status: sampleInvalid ? 'failed' as const : well.status,
+      affectedByTargetedControlFailure: sampleInvalid,
+      isFailed: well.isFailed || sampleInvalid,
+      controlsPassed: sampleInvalid ? false : well.controlsPassed,
       qcStatus,
+      validationChecks: well.validationChecks.map((check) =>
+        check.label === 'Controls Passed' && sampleInvalid ? { ...check, passed: false } : check,
+      ),
     }
   })
 
@@ -545,5 +559,9 @@ export function buildValidationData(input: BuildInput): ParsedUploadData {
     activityLog,
     qcBanner,
     plateViewReadiness,
+    mappedTargetMetrics,
+    sourceRecords: records,
+    defaultPanel,
+    plateSize,
   }
 }

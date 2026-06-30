@@ -37,6 +37,7 @@ interface MolecularValidationProps {
   instrumentControls?: InstrumentControlConfig[]
   onCloseWell: () => void
   onBack: () => void
+  onUploadNew?: () => void
   onWellClick: (well: WellData) => void
   onReleasePlate: () => void
   onReleaseValidOnly: () => void
@@ -49,12 +50,13 @@ export function MolecularValidation({
   instrumentControls = [],
   onCloseWell,
   onBack,
+  onUploadNew,
   onWellClick,
   onReleasePlate,
   onReleaseValidOnly,
   onReleaseSelected,
 }: MolecularValidationProps) {
-  const { plateSummary, qcBanner, sampleGroups, plateWells, plateViewReadiness } = uploadData
+  const { plateSummary, qcBanner, sampleGroups, plateWells, plateViewReadiness, mappedTargetMetrics } = uploadData
   const plateId = plateSummary.plateId
   const [view, setView] = useState<'table' | 'plate'>('table')
   const [search, setSearch] = useState('')
@@ -98,7 +100,20 @@ export function MolecularValidation({
             </div>
             <h1 className="text-base font-semibold text-slate-800">Molecular Results Validation</h1>
           </div>
-          <label className="relative flex items-center gap-1.5 px-2.5 py-1.5 border border-slate-200 rounded text-xs text-slate-600 bg-white shrink-0 cursor-pointer hover:bg-slate-50">
+          <div className="flex items-center gap-2 shrink-0">
+            {onUploadNew && (
+              <button
+                type="button"
+                onClick={onUploadNew}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 border border-blue-500 text-blue-600 rounded text-xs font-medium hover:bg-blue-50"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                Upload New File
+              </button>
+            )}
+            <label className="relative flex items-center gap-1.5 px-2.5 py-1.5 border border-slate-200 rounded text-xs text-slate-600 bg-white cursor-pointer hover:bg-slate-50">
             <svg className="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
@@ -111,6 +126,7 @@ export function MolecularValidation({
               aria-label="Filter by run date"
             />
           </label>
+          </div>
         </div>
       </header>
 
@@ -265,6 +281,7 @@ export function MolecularValidation({
           <WellDetailsPanel
             well={selectedWell}
             controlValidations={controlValidations}
+            mappedTargetMetrics={mappedTargetMetrics}
             onClose={onCloseWell}
           />
         )}

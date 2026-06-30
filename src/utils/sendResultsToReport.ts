@@ -17,7 +17,7 @@ const GENE_ABX_NAMES: Record<string, string> = {
 }
 
 function interpretationLabel(row: PreviewRow): string {
-  return formatInterpretationDisplay(row.interpretation, row.ampStatus)
+  return formatInterpretationDisplay(row.interpretation, { interpretationValue: row.interpretationValue })
 }
 
 function resultValue(row: PreviewRow): string {
