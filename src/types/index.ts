@@ -272,9 +272,12 @@ export type PlateFailureBehavior = 'fail-plate' | 'warning-only'
 
 export type TargetedFailureBehavior = 'fail-plate' | 'fail-target' | 'warning-only'
 
+export type TargetedControlTargetType = 'Gene' | 'Organism'
+
 export interface TargetedControlTarget {
   id: string
   target: string
+  type: TargetedControlTargetType
   ctCutOff: string
   status: AmpStatusOption
 }

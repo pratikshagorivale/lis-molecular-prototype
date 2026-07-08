@@ -90,7 +90,7 @@ function App() {
         instrumentControls: molecularControls,
       })
       setUploadData(data)
-      setPlateIdInput(data.plateSummary.plateId)
+      setPlateIdInput(data.plateSummary.plateId?.trim() ?? '')
     } catch (err) {
       setMappingError(err instanceof Error ? err.message : 'Failed to apply mappings')
       setUploadData(null)
@@ -121,8 +121,11 @@ function App() {
       setUploadData(null)
       setFileContext(context)
       setUserMappings(mappings)
-      setPlateIdInput(context.metadata.plateId)
-      await applyMappings(context, mappings, { plateIdOverride: context.metadata.plateId })
+      // Only pre-fill when Plate ID was actually found (filename/metadata); never invent one.
+      setPlateIdInput(context.metadata.plateId?.trim() ?? '')
+      await applyMappings(context, mappings, {
+        plateIdOverride: context.metadata.plateId?.trim() || undefined,
+      })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to read file'
       setMappingError(message)

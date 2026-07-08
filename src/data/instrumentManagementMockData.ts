@@ -1,17 +1,23 @@
 import type { ManagedInstrument } from '../types'
 
-export const AVAILABLE_TARGETS = [
+export const AVAILABLE_ORGANISMS = [
   'Escherichia coli',
   'Klebsiella pneumoniae',
   'Enterococcus faecalis',
   'Proteus mirabilis',
   'Staphylococcus aureus',
+]
+
+export const AVAILABLE_GENES = [
   'blaTEM',
   'blaCTX-M',
   'blaNDM-1',
   'vanA',
   'mecA',
 ]
+
+/** Combined catalog for validation lookups that do not need type. */
+export const AVAILABLE_TARGETS = [...AVAILABLE_ORGANISMS, ...AVAILABLE_GENES]
 
 export const managedInstruments: ManagedInstrument[] = [
   {
@@ -29,10 +35,10 @@ export const managedInstruments: ManagedInstrument[] = [
         control: 'PC',
         scope: 'targeted',
         targets: [
-          { id: 't1', target: 'Organism 1', ctCutOff: '—', status: 'Detected' },
-          { id: 't2', target: 'Organism 2', ctCutOff: '—', status: 'Detected' },
-          { id: 't3', target: 'Organism 3', ctCutOff: '—', status: 'Detected' },
-          { id: 't4', target: 'Organism 4', ctCutOff: '—', status: 'Detected' },
+          { id: 't1', target: 'Organism 1', type: 'Organism', ctCutOff: '—', status: 'Detected' },
+          { id: 't2', target: 'Organism 2', type: 'Organism', ctCutOff: '—', status: 'Detected' },
+          { id: 't3', target: 'Organism 3', type: 'Organism', ctCutOff: '—', status: 'Detected' },
+          { id: 't4', target: 'Organism 4', type: 'Organism', ctCutOff: '—', status: 'Detected' },
         ],
         targetedFailureBehavior: 'fail-plate',
       },

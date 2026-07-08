@@ -166,7 +166,9 @@ function PlateSummaryPanel({
             className="w-full text-sm text-slate-800 bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 uppercase"
           />
           {!plateIdFromFile && (
-            <p className="text-xs text-amber-600 mt-1">Not in file — enter manually</p>
+            <p className="text-xs text-amber-600 mt-1">
+              Not in file — optional for Sample ID transfer; required for Plate View
+            </p>
           )}
           <button
             type="button"
@@ -338,7 +340,9 @@ export function UploadMolecularResultsModal({
     onMappingsChange(synced.map((m) => (m.key === key ? { ...m, sourceColumn } : m)))
   }
 
-  const canContinue = !!uploadData && rows.some((row) => row.selected) && !!plateId.trim()
+  // Plate ID is optional here — results can be transferred by Sample ID.
+  // Missing Plate ID is surfaced as an error on Plate View after continue.
+  const canContinue = !!uploadData && rows.some((row) => row.selected)
   const plateIdFromFile = !!syncUserMappingsWithFieldDefs(userMappings).find((m) => m.key === 'plateId')?.sourceColumn
 
   return (

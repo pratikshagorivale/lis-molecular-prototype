@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Modal } from '../ui/Modal'
-import { AVAILABLE_TARGETS } from '../../data/instrumentManagementMockData'
+import { AVAILABLE_GENES, AVAILABLE_ORGANISMS } from '../../data/instrumentManagementMockData'
 import { getTargetCtCutOff } from '../../data/targetMaster'
 import { buildTargetCtCutOff, defaultCtCutOffFromMaster, formatCtCutOff, interpretationForCtCutOffOperator, mergeTargetCtCutOff, parseCtCutOff, type CtCutOffOperator, type ParsedCtCutOff } from '../../utils/ctCutOff'
 import type {
@@ -10,8 +10,17 @@ import type {
   ControlTypeOption,
   InstrumentControlConfig,
   TargetedControlTarget,
+  TargetedControlTargetType,
   TargetedFailureBehavior,
 } from '../../types'
+
+function resolveTargetType(target: string, fallback?: TargetedControlTargetType): TargetedControlTargetType {
+  if (AVAILABLE_GENES.includes(target)) return 'Gene'
+  if (AVAILABLE_ORGANISMS.includes(target)) return 'Organism'
+  if (fallback) return fallback
+  if (/^bla|^van|^mec|gene|resistance/i.test(target)) return 'Gene'
+  return 'Organism'
+}
 
 const CONTROL_TYPES: ControlTypeOption[] = [
   'Positive Control',
@@ -51,6 +60,7 @@ function controlToForm(control: InstrumentControlConfig): AddControlFormData {
       const ctCutOff = mergeTargetCtCutOff(target.ctCutOff, getTargetCtCutOff(target.target))
       return {
         ...target,
+        type: resolveTargetType(target.target, target.type),
         ctCutOff,
         status: interpretationForCtCutOffOperator(parseCtCutOff(ctCutOff).operator),
       }
@@ -138,37 +148,107 @@ function CtCutOffFields({
   )
 }
 
+function TargetSearchField({
+  label,
+  placeholder,
+  value,
+  onChange,
+  options,
+  onSelect,
+}: {
+  label: string
+  placeholder: string
+  value: string
+  onChange: (value: string) => void
+  options: string[]
+  onSelect: (target: string) => void
+}) {
+  return (
+    <div>
+      <FieldLabel>{label}</FieldLabel>
+      <div className="relative">
+        <svg className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="w-full pl-7 pr-2 py-1.5 border border-slate-200 rounded text-slate-700"
+        />
+      </div>
+      {value && options.length > 0 && (
+        <div className="mt-1 border border-slate-200 rounded bg-white max-h-28 overflow-y-auto">
+          {options.map((target) => (
+            <button
+              key={target}
+              type="button"
+              onClick={() => onSelect(target)}
+              className="w-full text-left px-2 py-1.5 hover:bg-slate-50 text-slate-700 border-b border-slate-100 last:border-b-0"
+            >
+              {target}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function AddControlModal({ open, editingControl, onClose, onSave }: AddControlModalProps) {
   const [form, setForm] = useState<AddControlFormData>(emptyForm)
-  const [targetSearch, setTargetSearch] = useState('')
+  const [geneSearch, setGeneSearch] = useState('')
+  const [organismSearch, setOrganismSearch] = useState('')
   const isEditing = Boolean(editingControl)
 
   useEffect(() => {
     if (open) {
       setForm(editingControl ? controlToForm(editingControl) : emptyForm())
-      setTargetSearch('')
+      setGeneSearch('')
+      setOrganismSearch('')
     }
   }, [open, editingControl])
 
-  const filteredTargets = useMemo(() => {
-    const q = targetSearch.trim().toLowerCase()
-    const selected = new Set(form.targets.map((t) => t.target))
-    return AVAILABLE_TARGETS.filter((target) => {
-      if (selected.has(target)) return false
+  const selectedTargets = useMemo(
+    () => new Set(form.targets.map((t) => t.target)),
+    [form.targets],
+  )
+
+  const filteredGenes = useMemo(() => {
+    const q = geneSearch.trim().toLowerCase()
+    return AVAILABLE_GENES.filter((target) => {
+      if (selectedTargets.has(target)) return false
       if (!q) return true
       return target.toLowerCase().includes(q)
     })
-  }, [form.targets, targetSearch])
+  }, [geneSearch, selectedTargets])
 
-  const addTarget = (target: string) => {
+  const filteredOrganisms = useMemo(() => {
+    const q = organismSearch.trim().toLowerCase()
+    return AVAILABLE_ORGANISMS.filter((target) => {
+      if (selectedTargets.has(target)) return false
+      if (!q) return true
+      return target.toLowerCase().includes(q)
+    })
+  }, [organismSearch, selectedTargets])
+
+  const addTarget = (target: string, type: TargetedControlTargetType) => {
     setForm((prev) => ({
       ...prev,
       targets: [
         ...prev.targets,
-        { id: crypto.randomUUID(), target, ctCutOff: defaultCtCutOffFromMaster(getTargetCtCutOff(target)), status: 'Detected' },
+        {
+          id: crypto.randomUUID(),
+          target,
+          type,
+          ctCutOff: defaultCtCutOffFromMaster(getTargetCtCutOff(target)),
+          status: 'Detected',
+        },
       ],
     }))
-    setTargetSearch('')
+    if (type === 'Gene') setGeneSearch('')
+    else setOrganismSearch('')
   }
 
   const updateTargetCtCutOff = (id: string, operator: CtCutOffOperator) => {
@@ -213,6 +293,7 @@ export function AddControlModal({ open, editingControl, onClose, onSave }: AddCo
       targets: form.scope === 'targeted'
         ? form.targets.map((target) => ({
             ...target,
+            type: resolveTargetType(target.target, target.type),
             ctCutOff: mergeTargetCtCutOff(target.ctCutOff, getTargetCtCutOff(target.target)),
           }))
         : undefined,
@@ -347,32 +428,24 @@ export function AddControlModal({ open, editingControl, onClose, onSave }: AddCo
           <>
             <div>
               <FieldLabel>Add Targets</FieldLabel>
-              <div className="relative">
-                <svg className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <input
-                  type="text"
-                  value={targetSearch}
-                  onChange={(e) => setTargetSearch(e.target.value)}
-                  placeholder="Search Targets"
-                  className="w-full pl-7 pr-2 py-1.5 border border-slate-200 rounded text-slate-700"
+              <div className="grid grid-cols-2 gap-3 mt-1">
+                <TargetSearchField
+                  label="Search Genes"
+                  placeholder="Search Genes"
+                  value={geneSearch}
+                  onChange={setGeneSearch}
+                  options={filteredGenes}
+                  onSelect={(target) => addTarget(target, 'Gene')}
+                />
+                <TargetSearchField
+                  label="Search Organisms"
+                  placeholder="Search Organisms"
+                  value={organismSearch}
+                  onChange={setOrganismSearch}
+                  options={filteredOrganisms}
+                  onSelect={(target) => addTarget(target, 'Organism')}
                 />
               </div>
-              {targetSearch && filteredTargets.length > 0 && (
-                <div className="mt-1 border border-slate-200 rounded bg-white max-h-28 overflow-y-auto">
-                  {filteredTargets.map((target) => (
-                    <button
-                      key={target}
-                      type="button"
-                      onClick={() => addTarget(target)}
-                      className="w-full text-left px-2 py-1.5 hover:bg-slate-50 text-slate-700 border-b border-slate-100 last:border-b-0"
-                    >
-                      {target}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
 
             <div className="border border-slate-200 rounded overflow-hidden">
@@ -380,6 +453,7 @@ export function AddControlModal({ open, editingControl, onClose, onSave }: AddCo
                 <thead>
                   <tr className="bg-slate-700 text-white">
                     <th className="px-2 py-1.5 text-left font-medium">Target</th>
+                    <th className="px-2 py-1.5 text-left font-medium">Type</th>
                     <th className="px-2 py-1.5 text-left font-medium">CT (CutOff)</th>
                     <th className="px-2 py-1.5 text-left font-medium">Expected Interpretation *</th>
                     <th className="px-2 py-1.5 w-8" />
@@ -388,12 +462,13 @@ export function AddControlModal({ open, editingControl, onClose, onSave }: AddCo
                 <tbody>
                   {form.targets.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-2 py-3 text-center text-slate-400">Search and add targets above</td>
+                      <td colSpan={5} className="px-2 py-3 text-center text-slate-400">Search and add genes or organisms above</td>
                     </tr>
                   ) : (
                     form.targets.map((row) => (
                       <tr key={row.id} className="border-t border-slate-100">
                         <td className="px-2 py-1.5 text-slate-700">{row.target}</td>
+                        <td className="px-2 py-1.5 text-slate-600">{resolveTargetType(row.target, row.type)}</td>
                         <td className="px-2 py-1.5">
                           <CtCutOffFields
                             cutOff={parseCtCutOff(row.ctCutOff)}

@@ -313,7 +313,7 @@ export function parseMetadataFromFileName(fileName: string) {
   }
   return {
     device: 'QS5',
-    plateId: 'AB1P',
+    plateId: '',
     runDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
     defaultPanel: 'UTI Panel',
   }
@@ -609,14 +609,16 @@ function propagateWellControlContext(records: RawMolecularRow[]): RawMolecularRo
 
 export function evaluatePlateViewReadiness(
   userMappings: UserFieldMapping[],
-  options?: { plateIdOverride?: string; metadataPlateId?: string },
+  options?: { plateIdOverride?: string; metadataPlateId?: string; resolvedPlateId?: string },
 ): PlateViewReadiness {
   const mappings = syncUserMappingsWithFieldDefs(userMappings)
   const wellColumnMapped = mappings.some((m) => m.key === 'well' && m.sourceColumn)
-  const plateIdColumnMapped = mappings.some((m) => m.key === 'plateId' && m.sourceColumn)
   const plateIdOverrideProvided = Boolean(options?.plateIdOverride?.trim())
   const metadataPlateId = Boolean(options?.metadataPlateId?.trim())
-  const plateIdAvailable = plateIdColumnMapped || plateIdOverrideProvided || metadataPlateId
+  // Prefer resolved value when provided; otherwise fall back to explicit sources.
+  const plateIdAvailable = options?.resolvedPlateId !== undefined
+    ? Boolean(options.resolvedPlateId.trim())
+    : plateIdOverrideProvided || metadataPlateId || mappings.some((m) => m.key === 'plateId' && m.sourceColumn)
   const canFormPlate = wellColumnMapped && plateIdAvailable
 
   if (canFormPlate) {
@@ -656,7 +658,8 @@ export function resolvePlateId(
     if (fromFile) return fromFile.toUpperCase()
   }
 
-  return (context.metadata.plateId || 'PLATE1').toUpperCase()
+  const fromMetadata = context.metadata.plateId?.trim()
+  return fromMetadata ? fromMetadata.toUpperCase() : ''
 }
 
 export async function buildUploadDataFromContext(
@@ -680,6 +683,7 @@ export async function buildUploadDataFromContext(
   const plateViewReadiness = evaluatePlateViewReadiness(mappings, {
     plateIdOverride: options?.plateIdOverride,
     metadataPlateId: context.metadata.plateId,
+    resolvedPlateId: plateId,
   })
 
   return buildValidationData({

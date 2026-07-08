@@ -57,7 +57,8 @@ export function MolecularValidation({
   onReleaseSelected,
 }: MolecularValidationProps) {
   const { plateSummary, qcBanner, sampleGroups, plateWells, plateViewReadiness, mappedTargetMetrics } = uploadData
-  const plateId = plateSummary.plateId
+  const plateId = plateSummary.plateId?.trim() || ''
+  const plateLabel = plateId || 'Plate ID missing'
   const [view, setView] = useState<'table' | 'plate'>('table')
   const [search, setSearch] = useState('')
   const [runDateFilter, setRunDateFilter] = useState(() => parseRunDateToIso(plateSummary.runDate))
@@ -96,7 +97,9 @@ export function MolecularValidation({
               <span>/</span>
               <span>Molecular Instrument</span>
               <span>/</span>
-              <span className="text-slate-700 font-medium">Plate {plateId}</span>
+              <span className={`font-medium ${plateId ? 'text-slate-700' : 'text-amber-700'}`}>
+                {plateId ? `Plate ${plateId}` : plateLabel}
+              </span>
             </div>
             <h1 className="text-base font-semibold text-slate-800">Molecular Results Validation</h1>
           </div>
@@ -132,7 +135,9 @@ export function MolecularValidation({
 
       {view === 'plate' && plateViewReadiness.canFormPlate && (
       <div className={`sticky top-0 z-10 border-b px-4 py-1.5 flex items-center gap-2.5 text-[11px] shrink-0 ${qcBannerClasses}`}>
-        <span className={`font-semibold shrink-0 ${qcBannerTitleClasses}`}>Plate {plateId}</span>
+        <span className={`font-semibold shrink-0 ${qcBannerTitleClasses}`}>
+          {plateId ? `Plate ${plateId}` : plateLabel}
+        </span>
         <span className="text-slate-300 shrink-0">·</span>
         <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
           {showConfiguredControl('PC') && (
@@ -194,7 +199,7 @@ export function MolecularValidation({
           />
         </div>
         <select className="px-2 py-1.5 border border-slate-200 rounded text-xs text-slate-600 bg-white">
-          <option>Filter by Plate: {plateId}</option>
+          <option>Filter by Plate: {plateId || '—'}</option>
         </select>
         <div className="flex-1" />
         <button className="px-2.5 py-1.5 border border-red-300 text-red-600 rounded text-xs hover:bg-red-50">
