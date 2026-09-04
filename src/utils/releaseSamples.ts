@@ -14,6 +14,11 @@ export function countReleaseableSamples(groups: SampleGroup[]) {
   }
 }
 
+/**
+ * Wells that can actually be released: a sample well, unaffected by a failed
+ * targeted control, whose own validation passed. Excluding the last condition
+ * counted failed and needs-review samples as releasable.
+ */
 export function countValidWells(plateWells: WellData[]): number {
-  return plateWells.filter(isValidSampleWell).length
+  return plateWells.filter((well) => isValidSampleWell(well) && well.status === 'ready').length
 }

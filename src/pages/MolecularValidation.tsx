@@ -10,6 +10,7 @@ import { Badge } from '../components/ui/Badge'
 import { PLATE_STATUS_VARIANT } from '../components/plateStatusStyles'
 import { mergeUploadIntoRegistry } from '../data/plateTrackingMockData'
 import { controlsFromBanner, failuresFromControls, uncoveredFailures } from '../utils/qcFailures'
+import { isPlateFinal, plateFinalReason } from '../utils/plateActions'
 import { countValidWells } from '../utils/releaseSamples'
 import { controlValidationsForWell } from '../utils/qcDetection'
 import { isControlTypeConfigured } from '../utils/controlEvaluation'
@@ -80,6 +81,7 @@ interface MolecularValidationProps {
   onReleaseSelected: () => void
   onRejectPlate: (plateId: string, reason: string) => void
   onRaiseCapa: (plateId: string, form: CapaFormData, failure: PlateQcFailure) => void
+  onCloseCapa: (plateId: string, capaId: string) => void
   /** Load another demo plate's results into the validation view. */
   onLoadPlate?: (plateId: string) => void
 }
@@ -98,6 +100,7 @@ export function MolecularValidation({
   onReleaseSelected,
   onRejectPlate,
   onRaiseCapa,
+  onCloseCapa,
   onLoadPlate,
 }: MolecularValidationProps) {
   const { plateSummary, qcBanner, sampleGroups, plateWells, plateViewReadiness, mappedTargetMetrics } = uploadData
@@ -206,6 +209,9 @@ export function MolecularValidation({
     pathology: 0,
     qc: 0,
   }
+
+  const plateIsFinal = isPlateFinal(plateStatus)
+  const finalReason = plateFinalReason(plateStatus)
 
   const activePlateFailures = activePlate
     ? uncoveredFailures(failuresFromControls(activePlate.qcControls), activePlate.capa.map((c) => c.control))
@@ -394,14 +400,19 @@ export function MolecularValidation({
         )}
         <button
           onClick={() => setRejectModalOpen(true)}
-          disabled={!activePlateId}
-          title={activePlateId ? undefined : 'A Plate ID is required to reject a plate'}
+          disabled={!activePlateId || plateIsFinal}
+          title={!activePlateId ? 'A Plate ID is required to reject a plate' : finalReason}
           className="px-2.5 py-1.5 border border-red-300 text-red-600 rounded text-xs hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {view === 'plate' ? 'Reject Plate' : 'Reject Selected'}
         </button>
         {view === 'table' && (
-          <button onClick={onReleaseSelected} className="px-2.5 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700">
+          <button
+            onClick={onReleaseSelected}
+            disabled={plateIsFinal}
+            title={finalReason}
+            className="px-2.5 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             Release Selected
           </button>
         )}
@@ -409,13 +420,18 @@ export function MolecularValidation({
           <>
             <button
               onClick={onReleaseValidOnly}
-              disabled={validWellCount === 0}
-              title={validWellCount === 0 ? 'No valid wells available to release' : undefined}
+              disabled={validWellCount === 0 || plateIsFinal}
+              title={finalReason ?? (validWellCount === 0 ? 'No valid wells available to release' : undefined)}
               className="px-2.5 py-1.5 border border-blue-600 text-blue-600 rounded text-xs hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Release Valid Only{validWellCount > 0 ? ` (${validWellCount})` : ''}
             </button>
-            <button onClick={onReleasePlate} className="px-2.5 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700">
+            <button
+              onClick={onReleasePlate}
+              disabled={plateIsFinal}
+              title={finalReason}
+              className="px-2.5 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               Release Plate
             </button>
           </>
@@ -502,6 +518,7 @@ export function MolecularValidation({
             setDetailPlateId(null)
             setCapaPlateId(id)
           }}
+          onCloseCapa={onCloseCapa}
         />
       )}
 

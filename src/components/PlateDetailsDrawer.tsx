@@ -32,7 +32,7 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   )
 }
 
-function CapaCard({ capa }: { capa: CapaRecord }) {
+function CapaCard({ capa, onClose }: { capa: CapaRecord; onClose: () => void }) {
   return (
     <div className="border border-slate-200 rounded p-3 space-y-2">
       <div className="flex items-center justify-between gap-2">
@@ -51,10 +51,17 @@ function CapaCard({ capa }: { capa: CapaRecord }) {
         <Field label="Corrective Action" value={capa.correctiveAction || <span className="text-slate-400">Not recorded</span>} />
         <Field label="Preventive Action" value={capa.preventiveAction || <span className="text-slate-400">Not recorded</span>} />
       </dl>
-      {capa.closedBy && (
+      {capa.closedBy ? (
         <p className="text-[11px] text-emerald-700">
           Closed by {capa.closedBy} on {capa.closedAt ? formatAuditTimestamp(capa.closedAt) : '—'}
         </p>
+      ) : (
+        <button
+          onClick={onClose}
+          className="px-2.5 py-1 border border-emerald-500 text-emerald-700 rounded text-[11px] font-medium hover:bg-emerald-50"
+        >
+          Mark Closed
+        </button>
       )}
     </div>
   )
@@ -68,6 +75,7 @@ interface PlateDetailsDrawerProps {
   onClose: () => void
   onOpenPlateView: (plateId: string) => void
   onRaiseCapa: (plateId: string) => void
+  onCloseCapa: (plateId: string, capaId: string) => void
 }
 
 export function PlateDetailsDrawer({
@@ -76,6 +84,7 @@ export function PlateDetailsDrawer({
   onClose,
   onOpenPlateView,
   onRaiseCapa,
+  onCloseCapa,
 }: PlateDetailsDrawerProps) {
   // Arriving from a Sample ID search lands directly on that sample.
   const [tab, setTab] = useState<PlateDetailTab>(highlightSampleId ? 'samples' : 'summary')
@@ -282,7 +291,9 @@ export function PlateDetailsDrawer({
               )}
             </div>
           ) : (
-            plate.capa.map((capa) => <CapaCard key={capa.id} capa={capa} />)
+            plate.capa.map((capa) => (
+              <CapaCard key={capa.id} capa={capa} onClose={() => onCloseCapa(plate.plateId, capa.id)} />
+            ))
           )}
         </div>
       )}

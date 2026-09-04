@@ -152,6 +152,29 @@ export function addCapaToPlate(
   }
 }
 
+/**
+ * Close one CAPA, leaving the plate's others untouched. Recorded on the CAPA
+ * itself rather than the audit trail, which captures only CAPA creation.
+ */
+export function closeCapaOnPlate(
+  registry: PlateRecord[],
+  plateId: string,
+  capaId: string,
+): PlateRecord[] {
+  return registry.map((plate) => (
+    plate.plateId.toUpperCase() === plateId.toUpperCase()
+      ? {
+          ...plate,
+          capa: plate.capa.map((capa) => (
+            capa.id === capaId && capa.status !== 'Closed'
+              ? { ...capa, status: 'Closed' as const, closedBy: CURRENT_USER.name, closedAt: new Date().toISOString() }
+              : capa
+          )),
+        }
+      : plate
+  ))
+}
+
 export interface SampleTraceHit {
   plate: PlateRecord
   sample: PlateSampleRef

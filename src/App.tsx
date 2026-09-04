@@ -11,6 +11,7 @@ import { loadManagedInstruments, saveManagedInstruments } from './utils/instrume
 import {
   addCapaToPlate,
   appendAuditEvent,
+  closeCapaOnPlate,
   createAuditEvent,
   loadPlateRegistry,
   savePlateRegistry,
@@ -383,6 +384,11 @@ function App() {
     setToast('Control configuration saved.')
   }, [])
 
+  const handleCloseCapa = useCallback((capaPlateId: string, capaId: string) => {
+    updateRegistry((prev) => closeCapaOnPlate(prev, capaPlateId, capaId))
+    setToast(`${capaId} closed.`)
+  }, [updateRegistry])
+
   const handleOpenReport = useCallback((entry: WaitingListEntry) => {
     setSelectedWaitingEntry(entry)
     setWaitingView('report')
@@ -418,6 +424,7 @@ function App() {
           onReleaseSelected={handleReleaseSelected}
           onRejectPlate={handleRejectPlate}
           onRaiseCapa={handleRaiseCapa}
+          onCloseCapa={handleCloseCapa}
           onLoadPlate={handleLoadPlate}
         />
       )}
