@@ -204,11 +204,9 @@ export interface ValidationSummary {
 
 /** Where a plate sits in its lifecycle — drives the All Plates status filter. */
 export type PlateLifecycleStatus =
-  | 'Pending Validation'
-  | 'In Validation'
-  | 'Ready for Release'
-  | 'Released'
+  | 'Pending'
   | 'Partially Released'
+  | 'Released'
   | 'Rejected'
 
 export type PlateQcOutcome = 'Passed' | 'Warning' | 'Failed'

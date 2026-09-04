@@ -9,11 +9,9 @@ type QcFilter = 'all' | 'failed-only' | 'capa-open'
 
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: 'all', label: 'All Statuses' },
-  { value: 'Pending Validation', label: 'Pending Validation' },
-  { value: 'In Validation', label: 'In Validation' },
-  { value: 'Ready for Release', label: 'Ready for Release' },
-  { value: 'Released', label: 'Released' },
+  { value: 'Pending', label: 'Pending' },
   { value: 'Partially Released', label: 'Partially Released' },
+  { value: 'Released', label: 'Released' },
   { value: 'Rejected', label: 'Rejected' },
 ]
 

@@ -4,18 +4,28 @@ import type {
   CapaRecord,
   PlateAuditAction,
   PlateAuditEvent,
+  PlateLifecycleStatus,
   PlateRecord,
   PlateSampleRef,
 } from '../types'
 
 const STORAGE_KEY = 'lis-molecular-prototype:plate-registry'
 
+const VALID_STATUSES: PlateLifecycleStatus[] = ['Pending', 'Partially Released', 'Released', 'Rejected']
+
+/** Map registries stored before the lifecycle was reduced to four statuses. */
+function normalizeStatus(status: string): PlateLifecycleStatus {
+  if ((VALID_STATUSES as string[]).includes(status)) return status as PlateLifecycleStatus
+  return 'Pending'
+}
+
 export function loadPlateRegistry(): PlateRecord[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return PLATE_REGISTRY_MOCK
     const parsed = JSON.parse(raw) as PlateRecord[]
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : PLATE_REGISTRY_MOCK
+    if (!Array.isArray(parsed) || parsed.length === 0) return PLATE_REGISTRY_MOCK
+    return parsed.map((plate) => ({ ...plate, status: normalizeStatus(plate.status) }))
   } catch {
     return PLATE_REGISTRY_MOCK
   }
