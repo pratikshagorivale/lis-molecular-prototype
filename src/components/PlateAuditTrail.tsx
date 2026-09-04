@@ -1,4 +1,5 @@
 import { formatAuditTimestamp } from '../utils/plateTracking'
+import { QcStatusIcon } from './QcStatusIcon'
 import type { PlateAuditAction, PlateAuditEvent } from '../types'
 
 const ACTION_STYLES: Record<PlateAuditAction, { label: string; dot: string; text: string }> = {
@@ -14,15 +15,9 @@ function QcResultList({ results }: { results: NonNullable<PlateAuditEvent['qcRes
     <ul className="mt-1.5 border border-slate-200 rounded divide-y divide-slate-100">
       {results.map((result) => (
         <li key={result.control} className="flex items-start gap-2 px-2 py-1">
-          {result.passed ? (
-            <svg className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-px" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-          ) : (
-            <svg className="w-3.5 h-3.5 text-red-600 shrink-0 mt-px" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          )}
+          <span className="mt-px">
+            <QcStatusIcon passed={result.passed} />
+          </span>
           <span className="min-w-0">
             <span className="text-[11px] font-medium text-slate-700">{result.control}</span>
             <span className={`text-[11px] ml-1.5 ${result.passed ? 'text-emerald-700' : 'text-red-700'}`}>

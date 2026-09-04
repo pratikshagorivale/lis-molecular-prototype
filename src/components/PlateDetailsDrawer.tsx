@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Drawer } from './ui/Drawer'
 import { Badge } from './ui/Badge'
 import { PlateAuditTrail } from './PlateAuditTrail'
+import { QcStatusIcon } from './QcStatusIcon'
 import { formatAuditTimestamp } from '../utils/plateTracking'
 import { uncoveredFailures } from '../utils/qcFailures'
 import type { CapaRecord, PlateRecord } from '../types'
@@ -83,6 +84,12 @@ export function PlateDetailsDrawer({
   const qcFailed = plate.qcOutcome !== 'Passed'
   const failures = plate.qcFailures ?? []
   const uncovered = uncoveredFailures(failures, plate.capa.map((c) => c.control))
+
+  // Every control and its outcome, from the plate's most recent QC evaluation.
+  const qcControls = [...plate.auditTrail]
+    .filter((entry) => entry.action === 'qc-result' && entry.qcResults?.length)
+    .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))[0]?.qcResults
+    ?? failures.map((failure) => ({ control: failure.label, passed: false }))
   const filteredSamples = sampleSearch.trim()
     ? plate.samples.filter((s) =>
         [s.sampleId, s.accessionNumber, s.patient, s.wellId].some((v) =>
@@ -144,23 +151,19 @@ export function PlateDetailsDrawer({
             <Badge variant={QC_OUTCOME_VARIANT[plate.qcOutcome]}>QC {plate.qcOutcome}</Badge>
           </div>
 
-          {failures.length > 0 && (
-            <div className="bg-amber-50 border border-amber-200 rounded px-3 py-2">
-              <p className="text-[11px] font-semibold text-amber-800 uppercase tracking-wide">
-                QC Failure{failures.length === 1 ? '' : `s (${failures.length})`}
-              </p>
-              <ul className="mt-1 space-y-1">
-                {failures.map((failure) => {
-                  const capa = plate.capa.find((c) => c.control === failure.control)
-                  return (
-                    <li key={failure.control} className="text-xs text-amber-800">
-                      <span className="font-medium">{failure.label}</span> — {failure.summary}
-                      <span className="block text-[11px] text-amber-700">
-                        {capa ? `${capa.id} · ${capa.status}` : 'No CAPA recorded — raising one is optional.'}
-                      </span>
-                    </li>
-                  )
-                })}
+          {qcControls.length > 0 && (
+            <div>
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Controls</p>
+              <ul className="border border-slate-200 rounded divide-y divide-slate-100">
+                {qcControls.map((control) => (
+                  <li key={control.control} className="flex items-center gap-2 px-2 py-1.5">
+                    <QcStatusIcon passed={control.passed} />
+                    <span className="text-xs text-slate-700">{control.control}</span>
+                    <span className={`ml-auto text-[11px] font-medium ${control.passed ? 'text-emerald-700' : 'text-red-700'}`}>
+                      {control.passed ? 'Passed' : 'Failed'}
+                    </span>
+                  </li>
+                ))}
               </ul>
             </div>
           )}
