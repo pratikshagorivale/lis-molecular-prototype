@@ -66,6 +66,8 @@ interface MolecularValidationProps {
   onReleaseSelected: () => void
   onRejectPlate: (plateId: string, reason: string) => void
   onRaiseCapa: (plateId: string, form: CapaFormData, qcFailureSummary: string) => void
+  /** Load another demo plate's results into the validation view. */
+  onLoadPlate?: (plateId: string) => void
 }
 
 export function MolecularValidation({
@@ -82,6 +84,7 @@ export function MolecularValidation({
   onReleaseSelected,
   onRejectPlate,
   onRaiseCapa,
+  onLoadPlate,
 }: MolecularValidationProps) {
   const { plateSummary, qcBanner, sampleGroups, plateWells, plateViewReadiness, mappedTargetMetrics } = uploadData
   const plateId = plateSummary.plateId?.trim() || ''
@@ -139,6 +142,7 @@ export function MolecularValidation({
   )
 
   const openPlateViewForPlate = (nextPlateId: string) => {
+    onLoadPlate?.(nextPlateId)
     setSelectedPlateFilter(nextPlateId)
     setActiveTab('molecular')
     setView('plate')

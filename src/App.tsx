@@ -21,7 +21,7 @@ import type { MolecularReportData } from './types'
 import { UploadMolecularResultsModal } from './components/UploadMolecularResultsModal'
 import { ReleaseConfirmationModal } from './components/ReleaseConfirmationModal'
 import { Toast } from './components/ui/Toast'
-import { buildDemoUploadData } from './data/demoUploadData'
+import { buildDemoUploadData, DEMO_PLATE_IDS } from './data/demoUploadData'
 import { loadLisRegistry } from './data/lisSampleRegistry'
 import {
   readSpreadsheetFile,
@@ -311,6 +311,14 @@ function App() {
     setScreen('validation')
   }, [])
 
+  /** Swap the validation view to another demo plate — real uploads have no dataset to load. */
+  const handleLoadPlate = useCallback((nextPlateId: string) => {
+    if (!DEMO_PLATE_IDS.includes(nextPlateId)) return
+    if (uploadData?.plateSummary.plateId === nextPlateId) return
+    setUploadData(buildDemoUploadData(nextPlateId))
+    setSelectedWell(null)
+  }, [uploadData])
+
   const handleSendResults = useCallback((selectionRows: PreviewRow[]) => {
     if (!uploadData) return
     const filtered = filterUploadDataBySelection(uploadData, selectionRows, { instrumentControls: molecularControls })
@@ -398,6 +406,7 @@ function App() {
           onReleaseSelected={handleReleaseSelected}
           onRejectPlate={handleRejectPlate}
           onRaiseCapa={handleRaiseCapa}
+          onLoadPlate={handleLoadPlate}
         />
       )}
       {activeNav === 'waiting' && waitingView === 'list' && (

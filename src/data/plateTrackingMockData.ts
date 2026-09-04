@@ -111,6 +111,30 @@ const CAPA_MU1: CapaRecord = {
 
 export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
   {
+    plateId: 'PLATE 9',
+    runDate: '7 Aug 2026',
+    instrument: 'Molecular Instrument',
+    samplesProcessed: 44,
+    samplesValid: 0,
+    samplesInvalid: 44,
+    status: 'Pending',
+    qcOutcome: 'Failed',
+    qcFailureSummary: 'Positive Control (A10) did not amplify — no Ct value returned.',
+    uploadedBy: 'Pratiksha Gorivale',
+    uploadedAt: '2026-08-07T08:15:00',
+    samples: buildSamples(727500, 44, 44),
+    auditTrail: [
+      event('uploaded', 'Pratiksha Gorivale', 'Lab Technologist', '2026-08-07T08:15:00',
+        'Plate uploaded from QuantStudio_Plate9_070826.xlsx'),
+      qcEvent('2026-08-07T08:15:04', [
+        { control: 'Positive Control (A10)', passed: false, detail: 'Undetermined — no amplification' },
+        { control: 'Negative Control (A11)', passed: true, detail: 'Not Detected as expected' },
+        { control: 'NTC', passed: true, detail: 'Not Detected as expected' },
+      ]),
+    ],
+    capa: [],
+  },
+  {
     plateId: 'PLATE 8',
     runDate: '6 Aug 2026',
     instrument: 'Molecular Instrument',
