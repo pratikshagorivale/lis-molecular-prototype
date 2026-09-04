@@ -211,16 +211,20 @@ export type PlateLifecycleStatus =
 
 export type PlateQcOutcome = 'Passed' | 'Failed'
 
+/** The only actions the audit trail captures. */
 export type PlateAuditAction =
   | 'uploaded'
-  | 'qc-evaluated'
-  | 'validated'
+  | 'qc-result'
   | 'released'
-  | 'partially-released'
   | 'rejected'
-  | 'capa-raised'
-  | 'capa-updated'
-  | 'capa-closed'
+  | 'capa-added'
+
+/** Per-control outcome shown under a QC Results event. */
+export interface AuditQcResult {
+  control: string
+  passed: boolean
+  detail?: string
+}
 
 /** One immutable entry in a plate's audit trail. */
 export interface PlateAuditEvent {
@@ -232,6 +236,8 @@ export interface PlateAuditEvent {
   timestamp: string
   summary: string
   detail?: string
+  /** Individual control outcomes — only on 'qc-result' events. */
+  qcResults?: AuditQcResult[]
   /** Sample IDs the event applied to, when it was scoped to a subset of the plate. */
   sampleIds?: string[]
 }

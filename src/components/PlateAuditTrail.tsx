@@ -2,15 +2,38 @@ import { formatAuditTimestamp } from '../utils/plateTracking'
 import type { PlateAuditAction, PlateAuditEvent } from '../types'
 
 const ACTION_STYLES: Record<PlateAuditAction, { label: string; dot: string; text: string }> = {
-  uploaded: { label: 'Uploaded', dot: 'bg-blue-500', text: 'text-blue-700' },
-  'qc-evaluated': { label: 'QC', dot: 'bg-slate-400', text: 'text-slate-700' },
-  validated: { label: 'Validated', dot: 'bg-indigo-500', text: 'text-indigo-700' },
+  uploaded: { label: 'File Upload', dot: 'bg-blue-500', text: 'text-blue-700' },
+  'qc-result': { label: 'QC Results', dot: 'bg-slate-400', text: 'text-slate-700' },
   released: { label: 'Released', dot: 'bg-emerald-500', text: 'text-emerald-700' },
-  'partially-released': { label: 'Partially Released', dot: 'bg-emerald-400', text: 'text-emerald-700' },
   rejected: { label: 'Rejected', dot: 'bg-red-500', text: 'text-red-700' },
-  'capa-raised': { label: 'CAPA Raised', dot: 'bg-amber-500', text: 'text-amber-700' },
-  'capa-updated': { label: 'CAPA Updated', dot: 'bg-amber-400', text: 'text-amber-700' },
-  'capa-closed': { label: 'CAPA Closed', dot: 'bg-emerald-500', text: 'text-emerald-700' },
+  'capa-added': { label: 'CAPA Added', dot: 'bg-amber-500', text: 'text-amber-700' },
+}
+
+function QcResultList({ results }: { results: NonNullable<PlateAuditEvent['qcResults']> }) {
+  return (
+    <ul className="mt-1.5 border border-slate-200 rounded divide-y divide-slate-100">
+      {results.map((result) => (
+        <li key={result.control} className="flex items-start gap-2 px-2 py-1">
+          {result.passed ? (
+            <svg className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-px" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          ) : (
+            <svg className="w-3.5 h-3.5 text-red-600 shrink-0 mt-px" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          )}
+          <span className="min-w-0">
+            <span className="text-[11px] font-medium text-slate-700">{result.control}</span>
+            <span className={`text-[11px] ml-1.5 ${result.passed ? 'text-emerald-700' : 'text-red-700'}`}>
+              {result.passed ? 'Passed' : 'Failed'}
+            </span>
+            {result.detail && <span className="block text-[11px] text-slate-500">{result.detail}</span>}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
 }
 
 interface PlateAuditTrailProps {
@@ -44,6 +67,7 @@ export function PlateAuditTrail({ entries }: PlateAuditTrailProps) {
             </div>
             <p className="text-xs text-slate-700 mt-0.5">{entry.summary}</p>
             {entry.detail && <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">{entry.detail}</p>}
+            {entry.qcResults && entry.qcResults.length > 0 && <QcResultList results={entry.qcResults} />}
             <p className="text-[11px] text-slate-500 mt-1">
               <span className="font-medium text-slate-600">{entry.actor}</span>
               <span className="text-slate-400"> · {entry.actorRole}</span>

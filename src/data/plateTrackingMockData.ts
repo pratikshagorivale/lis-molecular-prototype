@@ -1,4 +1,5 @@
 import type {
+  AuditQcResult,
   CapaRecord,
   ParsedUploadData,
   PlateAuditEvent,
@@ -52,9 +53,35 @@ function event(
   timestamp: string,
   summary: string,
   detail?: string,
-  sampleIds?: string[],
+  extras?: { qcResults?: AuditQcResult[]; sampleIds?: string[] },
 ): PlateAuditEvent {
-  return { id: auditId(), action, actor, actorRole, timestamp, summary, detail, sampleIds }
+  return {
+    id: auditId(),
+    action,
+    actor,
+    actorRole,
+    timestamp,
+    summary,
+    detail,
+    qcResults: extras?.qcResults,
+    sampleIds: extras?.sampleIds,
+  }
+}
+
+/** QC is always evaluated by the system, never a person. */
+function qcEvent(timestamp: string, results: AuditQcResult[]): PlateAuditEvent {
+  const failed = results.filter((r) => !r.passed)
+  return event(
+    'qc-result',
+    'System',
+    'Automated QC',
+    timestamp,
+    failed.length === 0
+      ? `QC passed — ${results.length} control${results.length === 1 ? '' : 's'} within limits`
+      : `QC failed — ${failed.length} of ${results.length} control${results.length === 1 ? '' : 's'} out of limits`,
+    undefined,
+    { qcResults: results },
+  )
 }
 
 const CAPA_PLATE7: CapaRecord = {
@@ -102,9 +129,11 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
       event('uploaded', 'Pratiksha Gorivale', 'Lab Technologist', '2026-08-06T09:12:00',
         'Plate uploaded from QuantStudio_Plate8_060826.xlsx',
         '48 wells parsed, 44 samples mapped to LIS orders, 4 controls detected.'),
-      event('qc-evaluated', 'System', 'Automated QC', '2026-08-06T09:12:04',
-        'QC passed — PC, NC and NTC within configured limits',
-        'PC Ct 22.8 (cut-off ≤ 30), NC not detected, NTC not detected.'),
+      qcEvent('2026-08-06T09:12:04', [
+        { control: 'Positive Control (A1)', passed: true, detail: 'Ct 22.8 — cut-off ≤ 30' },
+        { control: 'Negative Control (A2)', passed: true, detail: 'Not Detected as expected' },
+        { control: 'NTC (H12)', passed: true, detail: 'Not Detected as expected' },
+      ]),
     ],
     capa: [],
   },
@@ -127,22 +156,19 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
       event('uploaded', 'Anjali Verma', 'Lab Technologist', '2026-08-05T08:40:00',
         'Plate uploaded from QuantStudio_Plate7_050826.xlsx',
         '96 wells parsed, 90 samples mapped to LIS orders, 6 controls detected.'),
-      event('qc-evaluated', 'System', 'Automated QC', '2026-08-05T08:40:06',
-        'QC failed — NTC amplification detected',
-        'NTC well H12 amplified at Ct 32.4; expected Not Detected. Plate flagged for review.'),
-      event('capa-raised', 'Anjali Verma', 'Lab Technologist', '2026-08-05T14:20:00',
-        'CAPA-2026-014 raised against NTC failure',
+      qcEvent('2026-08-05T08:40:06', [
+        { control: 'Positive Control (A1)', passed: true, detail: 'Ct 24.1 — cut-off ≤ 30' },
+        { control: 'Negative Control (A2)', passed: true, detail: 'Not Detected as expected' },
+        { control: 'NTC (H12)', passed: false, detail: 'Amplified at Ct 32.4 — expected Not Detected' },
+        { control: 'Internal Control', passed: true, detail: 'Within limits in all sample wells' },
+      ]),
+      event('capa-added', 'Anjali Verma', 'Lab Technologist', '2026-08-05T14:20:00',
+        'CAPA-2026-014 added against NTC failure',
         'Root cause recorded as aerosol carryover during master-mix aliquoting.'),
-      event('validated', 'Dr. S. Raghavan', 'Consultant Microbiologist', '2026-08-05T15:52:00',
-        'Validated 90 of 96 samples',
-        '6 samples in the H12 quadrant withheld pending re-extraction.'),
-      event('partially-released', 'Dr. S. Raghavan', 'Consultant Microbiologist', '2026-08-05T16:10:00',
-        'Released 90 valid samples to LIS reports',
+      event('released', 'Dr. S. Raghavan', 'Consultant Microbiologist', '2026-08-05T16:10:00',
+        'Released 90 of 96 samples to LIS reports',
         '6 samples excluded — carried to Plate 8 for re-run.',
-        buildSamples(727300, 96, 6).slice(90).map((s) => s.sampleId)),
-      event('capa-closed', 'Dr. S. Raghavan', 'Consultant Microbiologist', '2026-08-07T09:05:00',
-        'CAPA-2026-014 closed',
-        'Preventive action verified — barrier tips in use, decontamination logged for 3 consecutive runs.'),
+        { sampleIds: buildSamples(727300, 96, 6).slice(90).map((sample) => sample.sampleId) }),
     ],
     capa: [CAPA_PLATE7],
   },
@@ -163,11 +189,13 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
       event('uploaded', 'Pratiksha Gorivale', 'Lab Technologist', '2026-08-04T11:05:00',
         'Plate uploaded from MU1_040826.csv',
         '72 wells parsed, 68 samples mapped to LIS orders.'),
-      event('qc-evaluated', 'System', 'Automated QC', '2026-08-04T11:05:03',
-        'QC failed — Internal Control below cut-off in 4 wells',
-        'IC Ct > 34 in C3, C7, D1, D9. Affected wells flagged and held from release.'),
-      event('capa-raised', 'Pratiksha Gorivale', 'Lab Technologist', '2026-08-04T17:45:00',
-        'CAPA-2026-015 raised against Internal Control failure',
+      qcEvent('2026-08-04T11:05:03', [
+        { control: 'Positive Control (A1)', passed: true, detail: 'Ct 23.6 — cut-off ≤ 30' },
+        { control: 'Negative Control (A2)', passed: true, detail: 'Not Detected as expected' },
+        { control: 'Internal Control (C3, C7, D1, D9)', passed: false, detail: 'Ct > 34 — suspected inhibition' },
+      ]),
+      event('capa-added', 'Pratiksha Gorivale', 'Lab Technologist', '2026-08-04T17:45:00',
+        'CAPA-2026-015 added against Internal Control failure',
         'Extraction batch EXT-2208 under investigation.'),
     ],
     capa: [CAPA_MU1],
@@ -188,11 +216,11 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
       event('uploaded', 'Pratiksha Gorivale', 'Lab Technologist', '2026-08-03T10:22:00',
         'Plate uploaded from AB1P_030826.xlsx',
         '64 wells parsed, 60 samples mapped to LIS orders, 4 controls detected.'),
-      event('qc-evaluated', 'System', 'Automated QC', '2026-08-03T10:22:05',
-        'QC passed — all configured controls within limits'),
-      event('validated', 'Pratiksha Gorivale', 'Lab Technologist', '2026-08-03T12:40:00',
-        'Validated 55 of 64 samples',
-        '9 samples marked Needs Review — awaiting consultant sign-off.'),
+      qcEvent('2026-08-03T10:22:05', [
+        { control: 'Positive Control (A1)', passed: true, detail: 'Ct 21.9 — cut-off ≤ 30' },
+        { control: 'Negative Control (A2)', passed: true, detail: 'Not Detected as expected' },
+        { control: 'NTC (H12)', passed: true, detail: 'Not Detected as expected' },
+      ]),
     ],
     capa: [],
   },
@@ -214,10 +242,12 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
       event('uploaded', 'Anjali Verma', 'Lab Technologist', '2026-08-02T09:00:00',
         'Plate uploaded from QS5-02_020826.xlsx',
         '36 wells parsed, 32 samples mapped to LIS orders, 4 controls detected.'),
-      event('qc-evaluated', 'System', 'Automated QC', '2026-08-02T09:00:04',
-        'QC passed — all configured controls within limits'),
-      event('validated', 'Dr. S. Raghavan', 'Consultant Microbiologist', '2026-08-02T13:12:00',
-        'Validated all 36 samples'),
+      qcEvent('2026-08-02T09:00:04', [
+        { control: 'Positive Control (A1)', passed: true, detail: 'Ct 22.4 — cut-off ≤ 30' },
+        { control: 'Negative Control (A2)', passed: true, detail: 'Not Detected as expected' },
+        { control: 'NTC (H12)', passed: true, detail: 'Not Detected as expected' },
+        { control: 'Internal Control', passed: true, detail: 'Within limits in all sample wells' },
+      ]),
       event('released', 'Dr. S. Raghavan', 'Consultant Microbiologist', '2026-08-02T13:30:00',
         'Released all 36 samples to LIS reports'),
     ],
@@ -242,14 +272,17 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
       event('uploaded', 'Pratiksha Gorivale', 'Lab Technologist', '2026-08-01T15:18:00',
         'Plate uploaded from QS5-01_010826.xlsx',
         '24 wells parsed, 20 samples mapped to LIS orders, 4 controls detected.'),
-      event('qc-evaluated', 'System', 'Automated QC', '2026-08-01T15:18:02',
-        'QC failed — Positive Control did not amplify',
-        'PC wells A1 and A2 returned Undetermined. Configured behaviour: fail plate.'),
+      qcEvent('2026-08-01T15:18:02', [
+        { control: 'Positive Control (A1)', passed: false, detail: 'Undetermined — no amplification' },
+        { control: 'Positive Control (A2)', passed: false, detail: 'Undetermined — no amplification' },
+        { control: 'Negative Control (B1)', passed: true, detail: 'Not Detected as expected' },
+        { control: 'NTC (H12)', passed: true, detail: 'Not Detected as expected' },
+      ]),
       event('rejected', 'Dr. S. Raghavan', 'Consultant Microbiologist', '2026-08-01T16:02:00',
         'Plate rejected — full re-run required',
         'Reason: Positive Control failure invalidates all 24 samples. Re-run scheduled for 2 Aug.'),
-      event('capa-raised', 'Pratiksha Gorivale', 'Lab Technologist', '2026-08-01T16:30:00',
-        'CAPA-2026-013 raised against Positive Control failure',
+      event('capa-added', 'Pratiksha Gorivale', 'Lab Technologist', '2026-08-01T16:30:00',
+        'CAPA-2026-013 added against Positive Control failure',
         'Reagent lot MM-4471 quarantined pending supplier investigation.'),
     ],
     capa: [
@@ -269,6 +302,29 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
   },
 ]
 
+/** Turn the parsed QC banner into the per-control rows the audit trail shows. */
+function buildQcResultsFromBanner(banner: ParsedUploadData['qcBanner']): AuditQcResult[] {
+  const controls: { label: string; present: boolean; passed: boolean }[] = [
+    { label: 'Positive Control', present: banner.pcPresent, passed: banner.pcPassed },
+    { label: 'Negative Control', present: banner.ncPresent, passed: banner.ncPassed },
+    { label: 'NTC', present: banner.ntcPresent, passed: banner.ntcPassed },
+    { label: 'Internal Control', present: banner.icPresent, passed: banner.icPassed },
+  ]
+
+  return controls
+    .filter((control) => control.present)
+    .map(({ label, passed }) => {
+      const wells = banner.failedControlWells
+        .filter((well) => well.controlType.toUpperCase() === label.split(' ').map((w) => w[0]).join('').toUpperCase())
+        .map((well) => well.wellId)
+      return {
+        control: wells.length > 0 ? `${label} (${wells.join(', ')})` : label,
+        passed,
+        detail: passed ? 'Within configured limits' : 'Outside configured limits',
+      }
+    })
+}
+
 /** Merge the plate currently open in validation into the registry, keeping its live counts. */
 export function mergeUploadIntoRegistry(
   registry: PlateRecord[],
@@ -283,6 +339,9 @@ export function mergeUploadIntoRegistry(
   const processed = uploadData.sampleGroups.length
   const invalid = Math.max(0, processed - valid)
   const qcOutcome = uploadData.qcBanner.qcPassed ? 'Passed' as const : 'Failed' as const
+
+  const uploadedAt = new Date().toISOString()
+  const liveQcResults = buildQcResultsFromBanner(uploadData.qcBanner)
 
   const existing = registry.find((p) => p.plateId.toUpperCase() === plateId.toUpperCase())
   const rest = registry.filter((p) => p.plateId.toUpperCase() !== plateId.toUpperCase())
@@ -310,17 +369,28 @@ export function mergeUploadIntoRegistry(
           ? undefined
           : uploadData.qcBanner.failedControlWells.map((w) => `${w.controlType} failed in ${w.wellId}`).join('; '),
         uploadedBy: CURRENT_USER.name,
-        uploadedAt: new Date().toISOString(),
+        uploadedAt,
         samples,
         auditTrail: [
           {
-            id: `evt-live-${plateId}`,
+            id: `evt-live-${plateId}-upload`,
             action: 'uploaded',
             actor: CURRENT_USER.name,
             actorRole: CURRENT_USER.role,
-            timestamp: new Date().toISOString(),
+            timestamp: uploadedAt,
             summary: `Plate uploaded from ${uploadData.fileName}`,
             detail: `${uploadData.plateSummary.totalWells} wells parsed, ${processed} samples mapped to LIS orders.`,
+          },
+          {
+            id: `evt-live-${plateId}-qc`,
+            action: 'qc-result',
+            actor: 'System',
+            actorRole: 'Automated QC',
+            timestamp: uploadedAt,
+            summary: liveQcResults.every((r) => r.passed)
+              ? `QC passed — ${liveQcResults.length} control${liveQcResults.length === 1 ? '' : 's'} within limits`
+              : `QC failed — ${liveQcResults.filter((r) => !r.passed).length} of ${liveQcResults.length} controls out of limits`,
+            qcResults: liveQcResults,
           },
         ],
         capa: [],

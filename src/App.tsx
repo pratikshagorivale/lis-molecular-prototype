@@ -262,8 +262,9 @@ function App() {
       updateRegistry((prev) => appendAuditEvent(
         prev,
         releasedPlateId,
+        // A partial release is still a release event — only the plate status differs.
         createAuditEvent(
-          status === 'Released' ? 'released' : 'partially-released',
+          'released',
           summary,
           excluded > 0
             ? `${excluded} sample${excluded === 1 ? '' : 's'} excluded — needs review, failed validation, or not selected.`

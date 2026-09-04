@@ -144,9 +144,9 @@ export function addCapaToPlate(
       withCapa,
       plateId,
       createAuditEvent(
-        'capa-raised',
-        `${capaId} raised against QC failure`,
-        form.rootCause ? `Root cause recorded as: ${form.rootCause}` : 'Raised without a root cause recorded.',
+        'capa-added',
+        `${capaId} added against QC failure`,
+        form.rootCause ? `Root cause recorded as: ${form.rootCause}` : 'Added without a root cause recorded.',
       ),
     ),
     capaId,
