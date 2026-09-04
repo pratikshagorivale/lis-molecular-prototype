@@ -9,7 +9,7 @@ import { WellDetailsPanel } from '../components/WellDetailsDrawer'
 import { Badge } from '../components/ui/Badge'
 import { PLATE_STATUS_VARIANT } from '../components/plateStatusStyles'
 import { mergeUploadIntoRegistry } from '../data/plateTrackingMockData'
-import { failedControlsFromBanner, uncoveredFailures } from '../utils/qcFailures'
+import { controlsFromBanner, failuresFromControls, uncoveredFailures } from '../utils/qcFailures'
 import { countValidWells } from '../utils/releaseSamples'
 import { controlValidationsForWell } from '../utils/qcDetection'
 import { isControlTypeConfigured } from '../utils/controlEvaluation'
@@ -170,11 +170,8 @@ export function MolecularValidation({
 
   // Each failed control gets its own CAPA, so only the uncovered ones are offered.
   const capaFailures = capaPlate
-    ? uncoveredFailures(
-        capaPlate.qcFailures ?? failedControlsFromBanner(qcBanner),
-        capaPlate.capa.map((c) => c.control),
-      )
-    : failedControlsFromBanner(qcBanner)
+    ? uncoveredFailures(failuresFromControls(capaPlate.qcControls), capaPlate.capa.map((c) => c.control))
+    : failuresFromControls(controlsFromBanner(qcBanner))
 
   const handleSubmitCapa = (form: CapaFormData, failure: PlateQcFailure) => {
     if (!capaPlateId) return
@@ -193,11 +190,8 @@ export function MolecularValidation({
   )
   const plateStatus: PlateLifecycleStatus = activePlate?.status ?? 'Pending'
   const activePlateFailures = activePlate
-    ? uncoveredFailures(
-        activePlate.qcFailures ?? failedControlsFromBanner(qcBanner),
-        activePlate.capa.map((c) => c.control),
-      )
-    : failedControlsFromBanner(qcBanner)
+    ? uncoveredFailures(failuresFromControls(activePlate.qcControls), activePlate.capa.map((c) => c.control))
+    : failuresFromControls(controlsFromBanner(qcBanner))
   const canRaiseCapa = activePlateFailures.length > 0 && Boolean(activePlateId)
 
   const qcBannerClasses = qcBanner.qcPassed

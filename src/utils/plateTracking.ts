@@ -36,6 +36,8 @@ export function loadPlateRegistry(): PlateRecord[] {
       ...plate,
       status: normalizeStatus(plate.status),
       qcOutcome: normalizeQcOutcome(plate.qcOutcome),
+      // Registries stored before controls were listed have none to restore.
+      qcControls: Array.isArray(plate.qcControls) ? plate.qcControls : [],
     }))
   } catch {
     return PLATE_REGISTRY_MOCK

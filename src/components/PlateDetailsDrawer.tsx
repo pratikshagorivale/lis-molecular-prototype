@@ -4,7 +4,7 @@ import { Badge } from './ui/Badge'
 import { PlateAuditTrail } from './PlateAuditTrail'
 import { QcStatusIcon } from './QcStatusIcon'
 import { formatAuditTimestamp } from '../utils/plateTracking'
-import { uncoveredFailures } from '../utils/qcFailures'
+import { controlLabel, failuresFromControls, uncoveredFailures } from '../utils/qcFailures'
 import type { CapaRecord, PlateRecord } from '../types'
 import { PLATE_STATUS_VARIANT, QC_OUTCOME_VARIANT } from './plateStatusStyles'
 
@@ -82,14 +82,10 @@ export function PlateDetailsDrawer({
   const [sampleSearch, setSampleSearch] = useState(highlightSampleId ?? '')
 
   const qcFailed = plate.qcOutcome !== 'Passed'
-  const failures = plate.qcFailures ?? []
-  const uncovered = uncoveredFailures(failures, plate.capa.map((c) => c.control))
-
-  // Every control and its outcome, from the plate's most recent QC evaluation.
-  const qcControls = [...plate.auditTrail]
-    .filter((entry) => entry.action === 'qc-result' && entry.qcResults?.length)
-    .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))[0]?.qcResults
-    ?? failures.map((failure) => ({ control: failure.label, passed: false }))
+  const uncovered = uncoveredFailures(
+    failuresFromControls(plate.qcControls),
+    plate.capa.map((c) => c.control),
+  )
   const filteredSamples = sampleSearch.trim()
     ? plate.samples.filter((s) =>
         [s.sampleId, s.accessionNumber, s.patient, s.wellId].some((v) =>
@@ -151,14 +147,14 @@ export function PlateDetailsDrawer({
             <Badge variant={QC_OUTCOME_VARIANT[plate.qcOutcome]}>QC {plate.qcOutcome}</Badge>
           </div>
 
-          {qcControls.length > 0 && (
+          {plate.qcControls.length > 0 && (
             <div>
               <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Controls</p>
               <ul className="border border-slate-200 rounded divide-y divide-slate-100">
-                {qcControls.map((control) => (
+                {plate.qcControls.map((control) => (
                   <li key={control.control} className="flex items-center gap-2 px-2 py-1.5">
                     <QcStatusIcon passed={control.passed} />
-                    <span className="text-xs text-slate-700">{control.control}</span>
+                    <span className="text-xs text-slate-700">{controlLabel(control)}</span>
                     <span className={`ml-auto text-[11px] font-medium ${control.passed ? 'text-emerald-700' : 'text-red-700'}`}>
                       {control.passed ? 'Passed' : 'Failed'}
                     </span>

@@ -1,10 +1,11 @@
 import { buildPlateWells } from './mockData'
-import { failedControlsFromBanner } from '../utils/qcFailures'
+import { auditResultsFromControls, controlsFromBanner } from '../utils/qcFailures'
 import type {
   AuditQcResult,
   CapaRecord,
   ParsedUploadData,
   PlateAuditEvent,
+  PlateQcControl,
   PlateRecord,
   PlateSampleRef,
   SampleStatus,
@@ -74,8 +75,9 @@ function event(
   }
 }
 
-/** QC is always evaluated by the system, never a person. */
-function qcEvent(timestamp: string, results: AuditQcResult[]): PlateAuditEvent {
+/** QC is always evaluated by the system, never a person. Derived from the plate's controls. */
+function qcEvent(timestamp: string, controls: PlateQcControl[]): PlateAuditEvent {
+  const results = auditResultsFromControls(controls)
   const failed = results.filter((r) => !r.passed)
   return event(
     'qc-result',
@@ -147,6 +149,52 @@ function samplesFromDemoWells(): PlateSampleRef[] {
 
 const AB1P_SAMPLES = samplesFromDemoWells()
 
+/** Each plate's controls, declared once and used for the banner, Summary tab and audit entry. */
+const PLATE9_CONTROLS: PlateQcControl[] = [
+  { control: 'PC', wells: ['H10'], passed: false, detail: 'Undetermined — no amplification', summary: 'Positive Control did not amplify — no Ct value returned.' },
+  { control: 'NC', wells: ['H11'], passed: true, detail: 'Not Detected as expected' },
+  { control: 'NTC', wells: ['H12'], passed: false, detail: 'Amplified at Ct 30.8 — expected Not Detected', summary: 'NTC amplified at Ct 30.8 — expected Not Detected.' },
+]
+
+const PLATE8_CONTROLS: PlateQcControl[] = [
+  { control: 'PC', wells: ['H10'], passed: true, detail: 'Ct 22.8 — cut-off ≤ 30' },
+  { control: 'NC', wells: ['H11'], passed: true, detail: 'Not Detected as expected' },
+  { control: 'NTC', wells: ['H12'], passed: true, detail: 'Not Detected as expected' },
+]
+
+const PLATE7_CONTROLS: PlateQcControl[] = [
+  { control: 'PC', wells: ['H10'], passed: true, detail: 'Ct 24.1 — cut-off ≤ 30' },
+  { control: 'NC', wells: ['H11'], passed: true, detail: 'Not Detected as expected' },
+  { control: 'NTC', wells: ['H12'], passed: false, detail: 'Amplified at Ct 32.4 — expected Not Detected', summary: 'NTC amplified at Ct 32.4 — expected Not Detected.' },
+  { control: 'IC', wells: [], passed: true, detail: 'Within limits in all sample wells' },
+]
+
+const MU1_CONTROLS: PlateQcControl[] = [
+  { control: 'PC', wells: ['H10'], passed: true, detail: 'Ct 23.6 — cut-off ≤ 30' },
+  { control: 'NC', wells: ['H11'], passed: true, detail: 'Not Detected as expected' },
+  { control: 'NTC', wells: ['H12'], passed: true, detail: 'Not Detected as expected' },
+  { control: 'IC', wells: [], passed: false, detail: 'Ct > 34 in the flagged sample wells', summary: 'Internal Control below cut-off in the flagged sample wells — suspected inhibition.' },
+]
+
+const AB1P_CONTROLS: PlateQcControl[] = [
+  { control: 'PC', wells: ['H10'], passed: true, detail: 'Ct 21.9 — cut-off ≤ 30' },
+  { control: 'NC', wells: ['H11'], passed: true, detail: 'Not Detected as expected' },
+  { control: 'NTC', wells: ['H12'], passed: true, detail: 'Not Detected as expected' },
+]
+
+const QS502_CONTROLS: PlateQcControl[] = [
+  { control: 'PC', wells: ['H10'], passed: true, detail: 'Ct 22.4 — cut-off ≤ 30' },
+  { control: 'NC', wells: ['H11'], passed: true, detail: 'Not Detected as expected' },
+  { control: 'NTC', wells: ['H12'], passed: true, detail: 'Not Detected as expected' },
+  { control: 'IC', wells: [], passed: true, detail: 'Within limits in all sample wells' },
+]
+
+const QS501_CONTROLS: PlateQcControl[] = [
+  { control: 'PC', wells: ['H10'], passed: false, detail: 'Undetermined — no amplification', summary: 'Positive Control failed to amplify — no Ct value returned.' },
+  { control: 'NC', wells: ['H11'], passed: true, detail: 'Not Detected as expected' },
+  { control: 'NTC', wells: ['H12'], passed: true, detail: 'Not Detected as expected' },
+]
+
 export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
   {
     plateId: 'PLATE 9',
@@ -157,29 +205,14 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
     samplesInvalid: 44,
     status: 'Pending',
     qcOutcome: 'Failed',
-    qcFailures: [
-      {
-        control: 'PC',
-        label: 'Positive Control (H10)',
-        summary: 'Positive Control did not amplify — no Ct value returned.',
-      },
-      {
-        control: 'NTC',
-        label: 'NTC (H12)',
-        summary: 'NTC amplified at Ct 30.8 — expected Not Detected.',
-      },
-    ],
+    qcControls: PLATE9_CONTROLS,
     uploadedBy: 'Pratiksha Gorivale',
     uploadedAt: '2026-08-07T08:15:00',
     samples: buildSamples(727500, 44, 44),
     auditTrail: [
       event('uploaded', 'Pratiksha Gorivale', 'Lab Technologist', '2026-08-07T08:15:00',
         'Plate uploaded from QuantStudio_Plate9_070826.xlsx'),
-      qcEvent('2026-08-07T08:15:04', [
-        { control: 'Positive Control (H10)', passed: false, detail: 'Undetermined — no amplification' },
-        { control: 'Negative Control (H11)', passed: true, detail: 'Not Detected as expected' },
-        { control: 'NTC (H12)', passed: false, detail: 'Amplified at Ct 30.8 — expected Not Detected' },
-      ]),
+      qcEvent('2026-08-07T08:15:04', PLATE9_CONTROLS),
     ],
     capa: [],
   },
@@ -192,17 +225,14 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
     samplesInvalid: 6,
     status: 'Pending',
     qcOutcome: 'Passed',
+    qcControls: PLATE8_CONTROLS,
     uploadedBy: 'Pratiksha Gorivale',
     uploadedAt: '2026-08-06T09:12:00',
     samples: buildSamples(727400, 48, 6),
     auditTrail: [
       event('uploaded', 'Pratiksha Gorivale', 'Lab Technologist', '2026-08-06T09:12:00',
         'Plate uploaded from QuantStudio_Plate8_060826.xlsx'),
-      qcEvent('2026-08-06T09:12:04', [
-        { control: 'Positive Control (H10)', passed: true, detail: 'Ct 22.8 — cut-off ≤ 30' },
-        { control: 'Negative Control (H11)', passed: true, detail: 'Not Detected as expected' },
-        { control: 'NTC (H12)', passed: true, detail: 'Not Detected as expected' },
-      ]),
+      qcEvent('2026-08-06T09:12:04', PLATE8_CONTROLS),
     ],
     capa: [],
   },
@@ -215,13 +245,7 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
     samplesInvalid: 6,
     status: 'Partially Released',
     qcOutcome: 'Failed',
-    qcFailures: [
-      {
-        control: 'NTC',
-        label: 'NTC (H12)',
-        summary: 'NTC amplified at Ct 32.4 — expected Not Detected.',
-      },
-    ],
+    qcControls: PLATE7_CONTROLS,
     uploadedBy: 'Anjali Verma',
     uploadedAt: '2026-08-05T08:40:00',
     releasedBy: 'Dr. S. Raghavan',
@@ -230,12 +254,7 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
     auditTrail: [
       event('uploaded', 'Anjali Verma', 'Lab Technologist', '2026-08-05T08:40:00',
         'Plate uploaded from QuantStudio_Plate7_050826.xlsx'),
-      qcEvent('2026-08-05T08:40:06', [
-        { control: 'Positive Control (H10)', passed: true, detail: 'Ct 24.1 — cut-off ≤ 30' },
-        { control: 'Negative Control (H11)', passed: true, detail: 'Not Detected as expected' },
-        { control: 'NTC (H12)', passed: false, detail: 'Amplified at Ct 32.4 — expected Not Detected' },
-        { control: 'Internal Control', passed: true, detail: 'Within limits in all sample wells' },
-      ]),
+      qcEvent('2026-08-05T08:40:06', PLATE7_CONTROLS),
       event('capa-added', 'Anjali Verma', 'Lab Technologist', '2026-08-05T14:20:00',
         'CAPA-2026-014 added against NTC failure'),
       event('released', 'Dr. S. Raghavan', 'Consultant Microbiologist', '2026-08-05T16:10:00',
@@ -253,24 +272,14 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
     samplesInvalid: 4,
     status: 'Pending',
     qcOutcome: 'Failed',
-    qcFailures: [
-      {
-        control: 'IC',
-        label: 'Internal Control',
-        summary: 'Internal Control below cut-off in the flagged sample wells — suspected inhibition.',
-      },
-    ],
+    qcControls: MU1_CONTROLS,
     uploadedBy: 'Pratiksha Gorivale',
     uploadedAt: '2026-08-04T11:05:00',
     samples: buildSamples(727200, 72, 4),
     auditTrail: [
       event('uploaded', 'Pratiksha Gorivale', 'Lab Technologist', '2026-08-04T11:05:00',
         'Plate uploaded from MU1_040826.csv'),
-      qcEvent('2026-08-04T11:05:03', [
-        { control: 'Positive Control (H10)', passed: true, detail: 'Ct 23.6 — cut-off ≤ 30' },
-        { control: 'Negative Control (H11)', passed: true, detail: 'Not Detected as expected' },
-        { control: 'Internal Control', passed: false, detail: 'Ct > 34 in the flagged sample wells — suspected inhibition' },
-      ]),
+      qcEvent('2026-08-04T11:05:03', MU1_CONTROLS),
       event('capa-added', 'Pratiksha Gorivale', 'Lab Technologist', '2026-08-04T17:45:00',
         'CAPA-2026-015 added against Internal Control failure'),
     ],
@@ -285,17 +294,14 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
     samplesInvalid: AB1P_SAMPLES.filter((s) => s.status !== 'Ready for Release').length,
     status: 'Pending',
     qcOutcome: 'Passed',
+    qcControls: AB1P_CONTROLS,
     uploadedBy: 'Pratiksha Gorivale',
     uploadedAt: '2026-08-03T10:22:00',
     samples: AB1P_SAMPLES,
     auditTrail: [
       event('uploaded', 'Pratiksha Gorivale', 'Lab Technologist', '2026-08-03T10:22:00',
         'Plate uploaded from AB1P_030826.xlsx'),
-      qcEvent('2026-08-03T10:22:05', [
-        { control: 'Positive Control (A10)', passed: true, detail: 'Ct 21.9 — cut-off ≤ 30' },
-        { control: 'Negative Control (A11)', passed: true, detail: 'Not Detected as expected' },
-        { control: 'NTC', passed: true, detail: 'Not Detected as expected' },
-      ]),
+      qcEvent('2026-08-03T10:22:05', AB1P_CONTROLS),
     ],
     capa: [],
   },
@@ -308,6 +314,7 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
     samplesInvalid: 0,
     status: 'Released',
     qcOutcome: 'Passed',
+    qcControls: QS502_CONTROLS,
     uploadedBy: 'Anjali Verma',
     uploadedAt: '2026-08-02T09:00:00',
     releasedBy: 'Dr. S. Raghavan',
@@ -316,12 +323,7 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
     auditTrail: [
       event('uploaded', 'Anjali Verma', 'Lab Technologist', '2026-08-02T09:00:00',
         'Plate uploaded from QS5-02_020826.xlsx'),
-      qcEvent('2026-08-02T09:00:04', [
-        { control: 'Positive Control (H10)', passed: true, detail: 'Ct 22.4 — cut-off ≤ 30' },
-        { control: 'Negative Control (H11)', passed: true, detail: 'Not Detected as expected' },
-        { control: 'NTC (H12)', passed: true, detail: 'Not Detected as expected' },
-        { control: 'Internal Control', passed: true, detail: 'Within limits in all sample wells' },
-      ]),
+      qcEvent('2026-08-02T09:00:04', QS502_CONTROLS),
       event('released', 'Dr. S. Raghavan', 'Consultant Microbiologist', '2026-08-02T13:30:00',
         'Released all 36 samples to LIS reports'),
     ],
@@ -336,13 +338,7 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
     samplesInvalid: 24,
     status: 'Rejected',
     qcOutcome: 'Failed',
-    qcFailures: [
-      {
-        control: 'PC',
-        label: 'Positive Control (H10)',
-        summary: 'Positive Control failed to amplify — no Ct value returned.',
-      },
-    ],
+    qcControls: QS501_CONTROLS,
     uploadedBy: 'Pratiksha Gorivale',
     uploadedAt: '2026-08-01T15:18:00',
     rejectedBy: 'Dr. S. Raghavan',
@@ -351,11 +347,7 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
     auditTrail: [
       event('uploaded', 'Pratiksha Gorivale', 'Lab Technologist', '2026-08-01T15:18:00',
         'Plate uploaded from QS5-01_010826.xlsx'),
-      qcEvent('2026-08-01T15:18:02', [
-        { control: 'Positive Control (H10)', passed: false, detail: 'Undetermined — no amplification' },
-        { control: 'Negative Control (H11)', passed: true, detail: 'Not Detected as expected' },
-        { control: 'NTC (H12)', passed: true, detail: 'Not Detected as expected' },
-      ]),
+      qcEvent('2026-08-01T15:18:02', QS501_CONTROLS),
       event('rejected', 'Dr. S. Raghavan', 'Consultant Microbiologist', '2026-08-01T16:02:00',
         'Plate rejected — Positive Control failure invalidates all 24 samples; full re-run scheduled for 2 Aug'),
       event('capa-added', 'Pratiksha Gorivale', 'Lab Technologist', '2026-08-01T16:30:00',
@@ -380,29 +372,6 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
   },
 ]
 
-/** Turn the parsed QC banner into the per-control rows the audit trail shows. */
-function buildQcResultsFromBanner(banner: ParsedUploadData['qcBanner']): AuditQcResult[] {
-  const controls: { label: string; present: boolean; passed: boolean }[] = [
-    { label: 'Positive Control', present: banner.pcPresent, passed: banner.pcPassed },
-    { label: 'Negative Control', present: banner.ncPresent, passed: banner.ncPassed },
-    { label: 'NTC', present: banner.ntcPresent, passed: banner.ntcPassed },
-    { label: 'Internal Control', present: banner.icPresent, passed: banner.icPassed },
-  ]
-
-  return controls
-    .filter((control) => control.present)
-    .map(({ label, passed }) => {
-      const wells = banner.failedControlWells
-        .filter((well) => well.controlType.toUpperCase() === label.split(' ').map((w) => w[0]).join('').toUpperCase())
-        .map((well) => well.wellId)
-      return {
-        control: wells.length > 0 ? `${label} (${wells.join(', ')})` : label,
-        passed,
-        detail: passed ? 'Within configured limits' : 'Outside configured limits',
-      }
-    })
-}
-
 /** Merge the plate currently open in validation into the registry, keeping its live counts. */
 export function mergeUploadIntoRegistry(
   registry: PlateRecord[],
@@ -419,15 +388,15 @@ export function mergeUploadIntoRegistry(
   const qcOutcome = uploadData.qcBanner.qcPassed ? 'Passed' as const : 'Failed' as const
 
   const uploadedAt = new Date().toISOString()
-  const liveQcResults = buildQcResultsFromBanner(uploadData.qcBanner)
 
   const existing = registry.find((p) => p.plateId.toUpperCase() === plateId.toUpperCase())
   const rest = registry.filter((p) => p.plateId.toUpperCase() !== plateId.toUpperCase())
 
   // Re-derive from the live banner, but keep the wording already recorded for a control.
-  const qcFailures = failedControlsFromBanner(uploadData.qcBanner).map((derived) =>
-    existing?.qcFailures?.find((f) => f.control === derived.control) ?? derived,
-  )
+  const qcControls = controlsFromBanner(uploadData.qcBanner).map((derived) => {
+    const recorded = existing?.qcControls.find((c) => c.control === derived.control)
+    return recorded && recorded.passed === derived.passed ? recorded : derived
+  })
 
   const samples: PlateSampleRef[] = uploadData.sampleGroups.map((group) => ({
     sampleId: group.sampleId,
@@ -444,7 +413,7 @@ export function mergeUploadIntoRegistry(
         samplesValid: valid,
         samplesInvalid: invalid,
         qcOutcome,
-        qcFailures,
+        qcControls,
         samples,
       }
     : {
@@ -456,7 +425,7 @@ export function mergeUploadIntoRegistry(
         samplesInvalid: invalid,
         status: 'Pending',
         qcOutcome,
-        qcFailures,
+        qcControls,
         uploadedBy: CURRENT_USER.name,
         uploadedAt,
         samples,
@@ -475,10 +444,10 @@ export function mergeUploadIntoRegistry(
             actor: 'System',
             actorRole: 'Automated QC',
             timestamp: uploadedAt,
-            summary: liveQcResults.every((r) => r.passed)
-              ? `QC passed — ${liveQcResults.length} control${liveQcResults.length === 1 ? '' : 's'} within limits`
-              : `QC failed — ${liveQcResults.filter((r) => !r.passed).length} of ${liveQcResults.length} controls out of limits`,
-            qcResults: liveQcResults,
+            summary: qcControls.every((c) => c.passed)
+              ? `QC passed — ${qcControls.length} control${qcControls.length === 1 ? '' : 's'} within limits`
+              : `QC failed — ${qcControls.filter((c) => !c.passed).length} of ${qcControls.length} controls out of limits`,
+            qcResults: auditResultsFromControls(qcControls),
           },
         ],
         capa: [],

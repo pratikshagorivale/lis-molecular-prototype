@@ -214,7 +214,23 @@ export type PlateQcOutcome = 'Passed' | 'Failed'
 /** Control types a plate's QC can fail on. IC is measured inside sample wells. */
 export type PlateControlKey = 'PC' | 'NC' | 'NTC' | 'IC'
 
-/** One control that failed on a plate. A plate can have several. */
+/**
+ * One control evaluated on a plate. This list is the single source of truth for
+ * QC — the plate banner, the plate Summary tab, the QC audit entry and CAPA
+ * scoping are all derived from it, so they cannot drift apart.
+ */
+export interface PlateQcControl {
+  control: PlateControlKey
+  /** Wells holding this control. Empty for IC, which is read inside sample wells. */
+  wells: string[]
+  passed: boolean
+  /** The reading behind the outcome, e.g. "Ct 22.8 — cut-off <= 30". */
+  detail?: string
+  /** Why it failed — pre-fills a CAPA raised against this control. */
+  summary?: string
+}
+
+/** A failed control, resolved for display and CAPA scoping. */
 export interface PlateQcFailure {
   control: PlateControlKey
   /** Display name including well position, e.g. "Positive Control (H10)". */
@@ -291,8 +307,8 @@ export interface PlateRecord {
   samplesInvalid: number
   status: PlateLifecycleStatus
   qcOutcome: PlateQcOutcome
-  /** Every control that failed — drives the QC banner, Plate View, and CAPA scoping. */
-  qcFailures?: PlateQcFailure[]
+  /** Every control evaluated on this plate, passed and failed alike. */
+  qcControls: PlateQcControl[]
   uploadedBy: string
   uploadedAt: string
   releasedBy?: string

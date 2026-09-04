@@ -10,6 +10,7 @@ import type {
   WellData,
   WellTargetRow,
 } from '../types'
+import { bannerFromControls } from '../utils/qcFailures'
 
 const ROWS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 const COLS = Array.from({ length: 12 }, (_, i) => i + 1)
@@ -180,7 +181,7 @@ function controlWell(
     ctValues: [{ target, ct, interpretation }],
     validationChecks: [],
     validationErrors: failed
-      ? [plate.qcFailures?.find((f) => f.control === control)?.summary ?? `${control} outside configured limits`]
+      ? [plate.qcControls.find((c) => c.control === control)?.summary ?? `${control} outside configured limits`]
       : undefined,
     isFailed: false,
     controlFailed: failed,
@@ -243,34 +244,21 @@ function sampleGroupFor(well: WellData, sample: PlateSampleRef, plate: PlateReco
   }
 }
 
+/**
+ * The banner comes straight from the plate's control list. IC has no control well,
+ * so its failure is pinned to the sample wells it was measured in.
+ */
 function bannerFor(plate: PlateRecord, icFailedWells: string[]): QcBanner {
-  const failed = failedControlKeys(plate)
-  const has = (key: PlateControlKey) => failed.includes(key)
-
-  const failedControlWells = failed.flatMap((key) => (
-    key === 'IC'
-      ? icFailedWells.map((wellId) => ({ wellId, controlType: 'IC', sampleId: '', label: 'IC' }))
-      : [{ wellId: CONTROL_WELLS[key], controlType: key, sampleId: key, label: key }]
+  const controls = plate.qcControls.map((control) => (
+    control.control === 'IC' && !control.passed
+      ? { ...control, wells: icFailedWells }
+      : control
   ))
-
-  return {
-    pcPassed: !has('PC'),
-    ncPassed: !has('NC'),
-    ntcPassed: !has('NTC'),
-    icPassed: !has('IC'),
-    pcPresent: true,
-    ncPresent: true,
-    ntcPresent: true,
-    icPresent: has('IC'),
-    qcPassed: failed.length === 0,
-    failedControlWells,
-    status: failed.length > 0 ? 'Needs review' : 'Valid',
-  }
+  return bannerFromControls(controls)
 }
 
 function failedControlKeys(plate: PlateRecord): PlateControlKey[] {
-  if (plate.qcOutcome !== 'Failed') return []
-  return (plate.qcFailures ?? []).map((failure) => failure.control)
+  return plate.qcControls.filter((control) => !control.passed).map((control) => control.control)
 }
 
 /** Build a full validation payload from a registry plate, so its own samples are shown. */
