@@ -265,7 +265,7 @@ export function MolecularValidation({
         </div>
       )}
 
-      {activeTab === 'molecular' && view === 'plate' && canShowPlateView && (
+      {activeTab === 'molecular' && (!qcBanner.qcPassed || (view === 'plate' && canShowPlateView)) && (
       <div className={`sticky top-0 z-10 border-b px-4 py-1.5 flex items-center gap-2.5 text-[11px] shrink-0 ${qcBannerClasses}`}>
         <span className={`font-semibold shrink-0 ${qcBannerTitleClasses}`}>
           {activePlateId ? `Plate ${activePlateId}` : plateLabel}
@@ -448,6 +448,7 @@ export function MolecularValidation({
             controlValidations={controlValidations}
             mappedTargetMetrics={mappedTargetMetrics}
             onClose={onCloseWell}
+            onAddCapa={activePlateId ? () => setCapaPlateId(activePlateId) : undefined}
           />
         )}
       </div>

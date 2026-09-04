@@ -7,6 +7,8 @@ interface WellDetailsPanelProps {
   controlValidations: WellControlValidation[]
   mappedTargetMetrics: MappedTargetMetrics
   onClose: () => void
+  /** Offered only when this well's QC failed — CAPA stays optional. */
+  onAddCapa?: () => void
 }
 
 function qcStatusVariant(status: WellQcStatus) {
@@ -162,9 +164,16 @@ function WellInformationSection({ well, isControl }: { well: WellData; isControl
   )
 }
 
-export function WellDetailsPanel({ well, controlValidations, mappedTargetMetrics, onClose }: WellDetailsPanelProps) {
+export function WellDetailsPanel({
+  well,
+  controlValidations,
+  mappedTargetMetrics,
+  onClose,
+  onAddCapa,
+}: WellDetailsPanelProps) {
   const isControl = well.isQc || well.status === 'control'
   const qcBadge = wellQcBadge(well, isControl)
+  const qcFailed = qcBadge === 'QC Failed'
 
   return (
     <aside className="w-[380px] shrink-0 min-h-0 bg-white border-l border-slate-200 shadow-[-6px_0_16px_rgba(15,23,42,0.06)] flex flex-col">
@@ -237,7 +246,16 @@ export function WellDetailsPanel({ well, controlValidations, mappedTargetMetrics
         )}
       </div>
 
-      <div className="px-4 py-3 border-t border-slate-200 bg-white shrink-0">
+      <div className="px-4 py-3 border-t border-slate-200 bg-white shrink-0 space-y-2">
+        {qcFailed && onAddCapa && (
+          <button
+            type="button"
+            onClick={onAddCapa}
+            className="w-full px-3 py-1.5 border border-amber-400 text-amber-700 rounded text-xs font-medium hover:bg-amber-50"
+          >
+            Add CAPA
+          </button>
+        )}
         {well.isFailed ? (
           <div className="flex gap-2">
             <button type="button" className="flex-1 px-3 py-1.5 border border-red-300 text-red-600 rounded text-xs font-medium hover:bg-red-50">
