@@ -1,12 +1,33 @@
 import { useEffect, useMemo, useState } from 'react'
 import { TableView } from '../components/TableView'
 import { PlateView } from '../components/PlateView'
+import { AllPlatesTab } from '../components/AllPlatesTab'
+import { PlateDetailsDrawer } from '../components/PlateDetailsDrawer'
+import { CapaModal } from '../components/CapaModal'
+import { RejectPlateModal } from '../components/RejectPlateModal'
 import { WellDetailsPanel } from '../components/WellDetailsDrawer'
 import { Badge } from '../components/ui/Badge'
+import { mergeUploadIntoRegistry } from '../data/plateTrackingMockData'
 import { countValidWells } from '../utils/releaseSamples'
 import { controlValidationsForWell } from '../utils/qcDetection'
 import { isControlTypeConfigured } from '../utils/controlEvaluation'
-import type { FailedControlWell, InstrumentControlConfig, ParsedUploadData, WellData } from '../types'
+import type {
+  CapaFormData,
+  FailedControlWell,
+  InstrumentControlConfig,
+  ParsedUploadData,
+  PlateRecord,
+  WellData,
+} from '../types'
+
+type DeviceValidationTab = 'molecular' | 'all-plates' | 'pathology' | 'qc'
+
+const DEVICE_TABS: { id: DeviceValidationTab; label: string }[] = [
+  { id: 'molecular', label: 'Molecular' },
+  { id: 'all-plates', label: 'All Plates' },
+  { id: 'pathology', label: 'Pathology' },
+  { id: 'qc', label: 'QC' },
+]
 
 function failedWellsCompact(failed: FailedControlWell[] | undefined, controlType: string): string {
   const wells = (failed ?? []).filter((f) => f.controlType === controlType)
@@ -33,6 +54,7 @@ function formatDateFilterLabel(isoDate: string): string {
 
 interface MolecularValidationProps {
   uploadData: ParsedUploadData
+  plateRegistry: PlateRecord[]
   selectedWell?: WellData | null
   instrumentControls?: InstrumentControlConfig[]
   onCloseWell: () => void
@@ -42,10 +64,13 @@ interface MolecularValidationProps {
   onReleasePlate: () => void
   onReleaseValidOnly: () => void
   onReleaseSelected: () => void
+  onRejectPlate: (plateId: string, reason: string) => void
+  onRaiseCapa: (plateId: string, form: CapaFormData, qcFailureSummary: string) => void
 }
 
 export function MolecularValidation({
   uploadData,
+  plateRegistry,
   selectedWell,
   instrumentControls = [],
   onCloseWell,
@@ -55,22 +80,96 @@ export function MolecularValidation({
   onReleasePlate,
   onReleaseValidOnly,
   onReleaseSelected,
+  onRejectPlate,
+  onRaiseCapa,
 }: MolecularValidationProps) {
   const { plateSummary, qcBanner, sampleGroups, plateWells, plateViewReadiness, mappedTargetMetrics } = uploadData
   const plateId = plateSummary.plateId?.trim() || ''
-  const plateLabel = plateId || 'Plate ID missing'
+  const [activeTab, setActiveTab] = useState<DeviceValidationTab>('molecular')
   const [view, setView] = useState<'table' | 'plate'>('table')
   const [search, setSearch] = useState('')
+  const [selectedPlateFilter, setSelectedPlateFilter] = useState(plateId)
   const [runDateFilter, setRunDateFilter] = useState(() => parseRunDateToIso(plateSummary.runDate))
 
   useEffect(() => {
     setRunDateFilter(parseRunDateToIso(plateSummary.runDate))
   }, [plateSummary.runDate])
-  const validWellCount = useMemo(() => countValidWells(plateWells), [plateWells])
+
+  useEffect(() => {
+    if (plateId) setSelectedPlateFilter(plateId)
+  }, [plateId])
+
+  const [detailPlateId, setDetailPlateId] = useState<string | null>(null)
+  const [detailSampleId, setDetailSampleId] = useState<string | undefined>(undefined)
+  const [rejectModalOpen, setRejectModalOpen] = useState(false)
+  const [capaPlateId, setCapaPlateId] = useState<string | null>(null)
+
+  const allPlates = useMemo(() => mergeUploadIntoRegistry(plateRegistry, uploadData), [plateRegistry, uploadData])
+  const plateFilterOptions = useMemo(() => {
+    const ids = allPlates.map((p) => p.plateId)
+    if (plateId && !ids.some((id) => id.toUpperCase() === plateId.toUpperCase())) {
+      return [plateId, ...ids]
+    }
+    return ids.length > 0 ? ids : plateId ? [plateId] : []
+  }, [allPlates, plateId])
+
+  const activePlateId = selectedPlateFilter || plateId
+  const plateLabel = activePlateId || 'Plate ID missing'
+
+  const filteredSampleGroups = useMemo(() => {
+    if (!activePlateId) return sampleGroups
+    return sampleGroups.filter((g) =>
+      g.rows.some((r) => !r.plateId || r.plateId.toUpperCase() === activePlateId.toUpperCase()),
+    )
+  }, [sampleGroups, activePlateId])
+
+  const filteredPlateWells = useMemo(() => {
+    if (!activePlateId) return plateWells
+    return plateWells.map((well) => {
+      if (well.status === 'empty') return well
+      if (!well.plateId || well.plateId.toUpperCase() === activePlateId.toUpperCase()) return well
+      return { ...well, status: 'empty' as const, label: '', sampleId: '', isQc: false }
+    })
+  }, [plateWells, activePlateId])
+
+  const validWellCount = useMemo(() => countValidWells(filteredPlateWells), [filteredPlateWells])
   const controlValidations = useMemo(
-    () => (selectedWell ? controlValidationsForWell(selectedWell, plateWells, instrumentControls) : []),
-    [selectedWell, plateWells, instrumentControls],
+    () => (selectedWell ? controlValidationsForWell(selectedWell, filteredPlateWells, instrumentControls) : []),
+    [selectedWell, filteredPlateWells, instrumentControls],
   )
+
+  const openPlateViewForPlate = (nextPlateId: string) => {
+    setSelectedPlateFilter(nextPlateId)
+    setActiveTab('molecular')
+    setView('plate')
+    setDetailPlateId(null)
+    onCloseWell()
+  }
+
+  const openPlateDetails = (nextPlateId: string, sampleId?: string) => {
+    setDetailPlateId(nextPlateId)
+    setDetailSampleId(sampleId)
+  }
+
+  const detailPlate = allPlates.find((p) => p.plateId === detailPlateId) ?? null
+  const capaPlate = allPlates.find((p) => p.plateId === capaPlateId) ?? null
+  const handleConfirmReject = (reason: string) => {
+    setRejectModalOpen(false)
+    onRejectPlate(activePlateId, reason)
+    // CAPA follows a rejection only when there is a QC failure to explain, and is skippable.
+    if (!qcBanner.qcPassed) setCapaPlateId(activePlateId)
+  }
+
+  const handleSubmitCapa = (form: CapaFormData) => {
+    if (!capaPlateId) return
+    const summary = capaPlate?.qcFailureSummary
+      ?? qcBanner.failedControlWells.map((w) => `${w.controlType} failed in well ${w.wellId}`).join('; ')
+      ?? 'QC failure recorded on this plate.'
+    onRaiseCapa(capaPlateId, form, summary || 'QC failure recorded on this plate.')
+    setCapaPlateId(null)
+  }
+
+  const canShowPlateView = plateViewReadiness.wellColumnMapped && Boolean(activePlateId)
 
   const showConfiguredControl = (type: 'PC' | 'NC' | 'NTC' | 'IC') =>
     instrumentControls.length === 0 || isControlTypeConfigured(type, instrumentControls)
@@ -97,8 +196,8 @@ export function MolecularValidation({
               <span>/</span>
               <span>Molecular Instrument</span>
               <span>/</span>
-              <span className={`font-medium ${plateId ? 'text-slate-700' : 'text-amber-700'}`}>
-                {plateId ? `Plate ${plateId}` : plateLabel}
+              <span className={`font-medium ${activePlateId ? 'text-slate-700' : 'text-amber-700'}`}>
+                {activePlateId ? `Plate ${activePlateId}` : plateLabel}
               </span>
             </div>
             <h1 className="text-base font-semibold text-slate-800">Molecular Results Validation</h1>
@@ -133,10 +232,43 @@ export function MolecularValidation({
         </div>
       </header>
 
-      {view === 'plate' && plateViewReadiness.canFormPlate && (
+      <div className="bg-white border-b border-slate-200 px-4 shrink-0">
+        <nav className="flex items-center gap-5" aria-label="Device validation tabs">
+          {DEVICE_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`py-2.5 text-xs font-medium border-b-2 -mb-px transition-colors ${
+                activeTab === tab.id
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {activeTab === 'all-plates' && (
+        <div className="flex-1 min-h-0 overflow-auto p-4 bg-slate-50">
+          <AllPlatesTab plates={allPlates} onOpenPlate={openPlateDetails} />
+        </div>
+      )}
+
+      {(activeTab === 'pathology' || activeTab === 'qc') && (
+        <div className="flex-1 min-h-0 overflow-auto p-4 bg-slate-50">
+          <div className="flex items-center justify-center min-h-[280px] bg-white border border-slate-200 rounded text-sm text-slate-500">
+            {activeTab === 'pathology' ? 'Pathology results will appear here' : 'QC results will appear here'}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'molecular' && view === 'plate' && canShowPlateView && (
       <div className={`sticky top-0 z-10 border-b px-4 py-1.5 flex items-center gap-2.5 text-[11px] shrink-0 ${qcBannerClasses}`}>
         <span className={`font-semibold shrink-0 ${qcBannerTitleClasses}`}>
-          {plateId ? `Plate ${plateId}` : plateLabel}
+          {activePlateId ? `Plate ${activePlateId}` : plateLabel}
         </span>
         <span className="text-slate-300 shrink-0">·</span>
         <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
@@ -177,7 +309,16 @@ export function MolecularValidation({
             </span>
           )}
         </div>
-        <span className="ml-auto shrink-0">
+        <span className="ml-auto shrink-0 flex items-center gap-2">
+          {!qcBanner.qcPassed && (
+            <button
+              type="button"
+              onClick={() => setCapaPlateId(activePlateId)}
+              className="px-2 py-0.5 border border-amber-400 text-amber-800 rounded text-[11px] font-medium hover:bg-amber-100"
+            >
+              Raise CAPA
+            </button>
+          )}
           <Badge variant={plateStatus.variant} size="sm">
             {plateStatus.label}
           </Badge>
@@ -185,6 +326,8 @@ export function MolecularValidation({
       </div>
       )}
 
+      {activeTab === 'molecular' && (
+      <>
       <div className="bg-white border-b border-slate-200 px-4 py-2 flex items-center gap-2 flex-wrap shrink-0">
         <div className="relative">
           <svg className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -198,11 +341,27 @@ export function MolecularValidation({
             className="pl-7 pr-2 py-1.5 border border-slate-200 rounded text-xs w-44 focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
         </div>
-        <select className="px-2 py-1.5 border border-slate-200 rounded text-xs text-slate-600 bg-white">
-          <option>Filter by Plate: {plateId || '—'}</option>
+        <select
+          value={activePlateId}
+          onChange={(e) => setSelectedPlateFilter(e.target.value)}
+          className="px-2 py-1.5 border border-slate-200 rounded text-xs text-slate-600 bg-white"
+          aria-label="Filter by plate"
+        >
+          {plateFilterOptions.length === 0 ? (
+            <option value="">Filter by Plate: —</option>
+          ) : (
+            plateFilterOptions.map((id) => (
+              <option key={id} value={id}>Filter by Plate: {id}</option>
+            ))
+          )}
         </select>
         <div className="flex-1" />
-        <button className="px-2.5 py-1.5 border border-red-300 text-red-600 rounded text-xs hover:bg-red-50">
+        <button
+          onClick={() => setRejectModalOpen(true)}
+          disabled={!activePlateId}
+          title={activePlateId ? undefined : 'A Plate ID is required to reject a plate'}
+          className="px-2.5 py-1.5 border border-red-300 text-red-600 rounded text-xs hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
           {view === 'plate' ? 'Reject Plate' : 'Reject Selected'}
         </button>
         {view === 'table' && (
@@ -210,7 +369,7 @@ export function MolecularValidation({
             Release Selected
           </button>
         )}
-        {view === 'plate' && plateViewReadiness.canFormPlate && (
+        {view === 'plate' && canShowPlateView && (
           <>
             <button
               onClick={onReleaseValidOnly}
@@ -245,12 +404,12 @@ export function MolecularValidation({
         <div className="flex-1 min-w-0 overflow-auto p-4 bg-slate-50">
           {view === 'table' ? (
             <TableView
-              groups={sampleGroups}
-              plateWells={plateWells}
+              groups={filteredSampleGroups}
+              plateWells={filteredPlateWells}
               onWellOpen={onWellClick}
               searchQuery={search}
             />
-          ) : !plateViewReadiness.canFormPlate ? (
+          ) : !canShowPlateView ? (
             <div className="flex items-center justify-center min-h-[320px]">
               <div className="max-w-md w-full bg-white border border-amber-200 rounded-lg p-6 shadow-sm">
                 <div className="flex items-start gap-3">
@@ -260,13 +419,14 @@ export function MolecularValidation({
                   <div>
                     <h2 className="text-sm font-semibold text-amber-800 mb-1">Plate view unavailable</h2>
                     <p className="text-sm text-amber-700 leading-relaxed">
-                      {plateViewReadiness.message}
+                      {plateViewReadiness.message
+                        ?? 'Plate cannot be formed — Plate ID and well positions were not found. Map Well Position and Plate ID in Field Mapping, or enter a Plate ID manually before continuing.'}
                     </p>
                     <ul className="mt-3 text-xs text-slate-600 space-y-1">
                       {!plateViewReadiness.wellColumnMapped && (
                         <li>• Well Position column is not mapped</li>
                       )}
-                      {!plateViewReadiness.plateIdAvailable && (
+                      {!activePlateId && (
                         <li>• Plate ID is not mapped or provided</li>
                       )}
                     </ul>
@@ -276,7 +436,7 @@ export function MolecularValidation({
             </div>
           ) : (
             <PlateView
-              wells={plateWells}
+              wells={filteredPlateWells}
               selectedWellId={selectedWell?.wellId ?? null}
               onWellClick={onWellClick}
             />
@@ -291,6 +451,47 @@ export function MolecularValidation({
           />
         )}
       </div>
+      </>
+      )}
+
+      {detailPlate && (
+        <PlateDetailsDrawer
+          key={`${detailPlate.plateId}-${detailSampleId ?? ''}`}
+          plate={detailPlate}
+          highlightSampleId={detailSampleId}
+          onClose={() => setDetailPlateId(null)}
+          onOpenPlateView={openPlateViewForPlate}
+          onRaiseCapa={(id) => {
+            setDetailPlateId(null)
+            setCapaPlateId(id)
+          }}
+        />
+      )}
+
+      {rejectModalOpen && (
+        <RejectPlateModal
+          plateId={activePlateId}
+          sampleCount={filteredSampleGroups.length}
+          qcFailed={!qcBanner.qcPassed}
+          onClose={() => setRejectModalOpen(false)}
+          onConfirm={handleConfirmReject}
+        />
+      )}
+
+      {capaPlateId && (
+        <CapaModal
+          plateId={capaPlateId}
+          qcFailureSummary={
+            capaPlate?.qcFailureSummary
+            || qcBanner.failedControlWells.map((w) => `${w.controlType} failed in well ${w.wellId}`).join('; ')
+            || 'QC failure recorded on this plate.'
+          }
+          skipLabel="Skip CAPA"
+          onClose={() => setCapaPlateId(null)}
+          onSkip={() => setCapaPlateId(null)}
+          onSubmit={handleSubmitCapa}
+        />
+      )}
     </div>
   )
 }

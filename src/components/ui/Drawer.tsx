@@ -8,9 +8,16 @@ interface DrawerProps {
   footer?: React.ReactNode
   /** When false, the page behind the drawer stays interactive (e.g. plate well selection). */
   modal?: boolean
+  /** Wider panel for content that needs tables (e.g. plate audit trail). */
+  width?: 'md' | 'lg'
 }
 
-export function Drawer({ open, onClose, title, children, footer, modal = true }: DrawerProps) {
+const widths = {
+  md: 'w-[420px]',
+  lg: 'w-[560px]',
+}
+
+export function Drawer({ open, onClose, title, children, footer, modal = true, width = 'md' }: DrawerProps) {
   useEffect(() => {
     if (open && modal) document.body.style.overflow = 'hidden'
     else document.body.style.overflow = ''
@@ -26,7 +33,7 @@ export function Drawer({ open, onClose, title, children, footer, modal = true }:
         />
       )}
       <div
-        className={`fixed top-0 right-0 h-full w-[420px] bg-white shadow-2xl z-50 flex flex-col transition-transform duration-200 ${open ? 'translate-x-0' : 'translate-x-full pointer-events-none'}`}
+        className={`fixed top-0 right-0 h-full max-w-full ${widths[width]} bg-white shadow-2xl z-50 flex flex-col transition-transform duration-200 ${open ? 'translate-x-0' : 'translate-x-full pointer-events-none'}`}
       >
         <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 shrink-0">
           <h2 className="text-sm font-semibold text-slate-800">{title}</h2>

@@ -202,6 +202,98 @@ export interface ValidationSummary {
   missingControls: number
 }
 
+/** Where a plate sits in its lifecycle — drives the All Plates status filter. */
+export type PlateLifecycleStatus =
+  | 'Pending Validation'
+  | 'In Validation'
+  | 'Ready for Release'
+  | 'Released'
+  | 'Partially Released'
+  | 'Rejected'
+
+export type PlateQcOutcome = 'Passed' | 'Warning' | 'Failed'
+
+export type PlateAuditAction =
+  | 'uploaded'
+  | 'qc-evaluated'
+  | 'validated'
+  | 'released'
+  | 'partially-released'
+  | 'rejected'
+  | 'capa-raised'
+  | 'capa-updated'
+  | 'capa-closed'
+
+/** One immutable entry in a plate's audit trail. */
+export interface PlateAuditEvent {
+  id: string
+  action: PlateAuditAction
+  actor: string
+  actorRole: string
+  /** ISO 8601 timestamp — formatted for display at render time. */
+  timestamp: string
+  summary: string
+  detail?: string
+  /** Sample IDs the event applied to, when it was scoped to a subset of the plate. */
+  sampleIds?: string[]
+}
+
+export type CapaStatus = 'Open' | 'In Progress' | 'Closed'
+
+/** Corrective and Preventive Action raised against a QC failure. Always optional. */
+export interface CapaRecord {
+  id: string
+  plateId: string
+  raisedBy: string
+  raisedAt: string
+  qcFailureSummary: string
+  rootCause: string
+  correctiveAction: string
+  preventiveAction: string
+  status: CapaStatus
+  closedBy?: string
+  closedAt?: string
+}
+
+/** Sample-level index entry so a plate can be traced back from a Sample ID. */
+export interface PlateSampleRef {
+  sampleId: string
+  accessionNumber: string
+  patient: string
+  wellId: string
+  status: SampleStatus
+}
+
+/** One plate in the tracking registry — every plate, not only pending ones. */
+export interface PlateRecord {
+  plateId: string
+  runDate: string
+  instrument: string
+  samplesProcessed: number
+  samplesValid: number
+  samplesInvalid: number
+  status: PlateLifecycleStatus
+  qcOutcome: PlateQcOutcome
+  qcFailureSummary?: string
+  uploadedBy: string
+  uploadedAt: string
+  releasedBy?: string
+  releasedAt?: string
+  rejectedBy?: string
+  rejectedAt?: string
+  samples: PlateSampleRef[]
+  auditTrail: PlateAuditEvent[]
+  capa: CapaRecord[]
+}
+
+/** Draft captured by the CAPA form before it becomes a CapaRecord. */
+export interface CapaFormData {
+  rootCause: string
+  correctiveAction: string
+  preventiveAction: string
+  status: CapaStatus
+}
+
 export interface ActivityLogEntry {
   time: string
   message: string
