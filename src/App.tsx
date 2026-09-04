@@ -21,7 +21,7 @@ import type { MolecularReportData } from './types'
 import { UploadMolecularResultsModal } from './components/UploadMolecularResultsModal'
 import { ReleaseConfirmationModal } from './components/ReleaseConfirmationModal'
 import { Toast } from './components/ui/Toast'
-import { buildDemoUploadData, DEMO_PLATE_IDS } from './data/demoUploadData'
+import { buildDemoUploadData } from './data/demoUploadData'
 import { loadLisRegistry } from './data/lisSampleRegistry'
 import {
   readSpreadsheetFile,
@@ -311,13 +311,21 @@ function App() {
     setScreen('validation')
   }, [])
 
-  /** Swap the validation view to another demo plate — real uploads have no dataset to load. */
+  /**
+   * Swap the validation view to another plate from the registry. Skipped once a real
+   * file is loaded, so an actual upload is never replaced by demo results.
+   */
   const handleLoadPlate = useCallback((nextPlateId: string) => {
-    if (!DEMO_PLATE_IDS.includes(nextPlateId)) return
-    if (uploadData?.plateSummary.plateId === nextPlateId) return
-    setUploadData(buildDemoUploadData(nextPlateId))
+    if (fileContext) return
+    if (!nextPlateId || uploadData?.plateSummary.plateId === nextPlateId) return
+    const plate = plateRegistry.find((p) => p.plateId.toUpperCase() === nextPlateId.toUpperCase())
+    if (!plate) return
+    setUploadData(buildDemoUploadData(plate.plateId, {
+      qcFailed: plate.qcOutcome === 'Failed',
+      runDate: plate.runDate,
+    }))
     setSelectedWell(null)
-  }, [uploadData])
+  }, [fileContext, uploadData, plateRegistry])
 
   const handleSendResults = useCallback((selectionRows: PreviewRow[]) => {
     if (!uploadData) return

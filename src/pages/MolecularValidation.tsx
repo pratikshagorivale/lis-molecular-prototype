@@ -7,6 +7,7 @@ import { CapaModal } from '../components/CapaModal'
 import { RejectPlateModal } from '../components/RejectPlateModal'
 import { WellDetailsPanel } from '../components/WellDetailsDrawer'
 import { Badge } from '../components/ui/Badge'
+import { PLATE_STATUS_VARIANT } from '../components/plateStatusStyles'
 import { mergeUploadIntoRegistry } from '../data/plateTrackingMockData'
 import { countValidWells } from '../utils/releaseSamples'
 import { controlValidationsForWell } from '../utils/qcDetection'
@@ -16,6 +17,7 @@ import type {
   FailedControlWell,
   InstrumentControlConfig,
   ParsedUploadData,
+  PlateLifecycleStatus,
   PlateRecord,
   WellData,
 } from '../types'
@@ -178,9 +180,11 @@ export function MolecularValidation({
   const showConfiguredControl = (type: 'PC' | 'NC' | 'NTC' | 'IC') =>
     instrumentControls.length === 0 || isControlTypeConfigured(type, instrumentControls)
 
-  const plateStatus = qcBanner.qcPassed
-    ? { label: 'Valid', variant: 'success' as const }
-    : { label: 'Needs review', variant: 'warning' as const }
+  // The controls listed in the banner already convey QC; the badge carries lifecycle status.
+  const activePlate = allPlates.find(
+    (p) => p.plateId.toUpperCase() === activePlateId.toUpperCase(),
+  )
+  const plateStatus: PlateLifecycleStatus = activePlate?.status ?? 'Pending'
 
   const qcBannerClasses = qcBanner.qcPassed
     ? 'bg-emerald-50 border-emerald-200'
@@ -323,8 +327,8 @@ export function MolecularValidation({
               Raise CAPA
             </button>
           )}
-          <Badge variant={plateStatus.variant} size="sm">
-            {plateStatus.label}
+          <Badge variant={PLATE_STATUS_VARIANT[plateStatus]} size="sm">
+            {plateStatus}
           </Badge>
         </span>
       </div>
@@ -347,7 +351,10 @@ export function MolecularValidation({
         </div>
         <select
           value={activePlateId}
-          onChange={(e) => setSelectedPlateFilter(e.target.value)}
+          onChange={(e) => {
+            onLoadPlate?.(e.target.value)
+            setSelectedPlateFilter(e.target.value)
+          }}
           className="px-2 py-1.5 border border-slate-200 rounded text-xs text-slate-600 bg-white"
           aria-label="Filter by plate"
         >
@@ -360,6 +367,14 @@ export function MolecularValidation({
           )}
         </select>
         <div className="flex-1" />
+        {!qcBanner.qcPassed && activePlateId && (
+          <button
+            onClick={() => setCapaPlateId(activePlateId)}
+            className="px-2.5 py-1.5 border border-amber-400 text-amber-700 rounded text-xs font-medium hover:bg-amber-50"
+          >
+            Raise CAPA
+          </button>
+        )}
         <button
           onClick={() => setRejectModalOpen(true)}
           disabled={!activePlateId}

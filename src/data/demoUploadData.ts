@@ -17,9 +17,6 @@ export const FAILED_QC_DEMO_PLATE_ID = 'PLATE 9'
 const FAILED_QC_RUN_DATE = '7 Aug 2026'
 const FAILED_QC_FILE = 'QuantStudio_Plate9_070826.xlsx'
 
-/** Demo plates that can be opened in validation from the All Plates tab. */
-export const DEMO_PLATE_IDS = [PLATE_ID, FAILED_QC_DEMO_PLATE_ID]
-
 const PASSING_QC_BANNER: QcBanner = {
   pcPassed: true,
   ncPassed: true,
@@ -77,14 +74,24 @@ function retagSampleGroups(groups: SampleGroup[], plateId: string): SampleGroup[
   }))
 }
 
+interface DemoPlateOptions {
+  /** Fail the Positive Control, so the QC-failure and CAPA flows can be exercised. */
+  qcFailed?: boolean
+  runDate?: string
+}
+
 /**
  * Demo validation payload so the Molecular tab is reachable without re-uploading.
- * Pass a plate ID to load that demo plate; PLATE 9 comes back with a failed
- * Positive Control so the QC-failure and CAPA flows can be exercised.
+ * Any plate ID can be loaded — the same wells are re-tagged to that plate so no
+ * plate in the registry opens blank. PLATE 9 always fails its Positive Control.
  */
-export function buildDemoUploadData(plateId: string = PLATE_ID): ParsedUploadData {
-  const qcFailed = plateId === FAILED_QC_DEMO_PLATE_ID
-  const runDate = qcFailed ? FAILED_QC_RUN_DATE : RUN_DATE
+export function buildDemoUploadData(
+  plateId: string = PLATE_ID,
+  options: DemoPlateOptions = {},
+): ParsedUploadData {
+  const qcFailed = options.qcFailed ?? plateId === FAILED_QC_DEMO_PLATE_ID
+  const runDate = options.runDate
+    ?? (plateId === FAILED_QC_DEMO_PLATE_ID ? FAILED_QC_RUN_DATE : RUN_DATE)
   const plateWells = retagWells(buildPlateWells(), plateId, qcFailed)
   const groups = retagSampleGroups(sampleGroups, plateId)
   const validSamples = groups.filter((g) => g.sampleValid).length
