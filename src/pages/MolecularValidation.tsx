@@ -9,6 +9,7 @@ import { WellDetailsPanel } from '../components/WellDetailsDrawer'
 import { Badge } from '../components/ui/Badge'
 import { PLATE_STATUS_VARIANT } from '../components/plateStatusStyles'
 import { mergeUploadIntoRegistry } from '../data/plateTrackingMockData'
+import { failedControlsFromBanner, uncoveredFailures } from '../utils/qcFailures'
 import { countValidWells } from '../utils/releaseSamples'
 import { controlValidationsForWell } from '../utils/qcDetection'
 import { isControlTypeConfigured } from '../utils/controlEvaluation'
@@ -18,6 +19,7 @@ import type {
   InstrumentControlConfig,
   ParsedUploadData,
   PlateLifecycleStatus,
+  PlateQcFailure,
   PlateRecord,
   WellData,
 } from '../types'
@@ -67,7 +69,7 @@ interface MolecularValidationProps {
   onReleaseValidOnly: () => void
   onReleaseSelected: () => void
   onRejectPlate: (plateId: string, reason: string) => void
-  onRaiseCapa: (plateId: string, form: CapaFormData, qcFailureSummary: string) => void
+  onRaiseCapa: (plateId: string, form: CapaFormData, failure: PlateQcFailure) => void
   /** Load another demo plate's results into the validation view. */
   onLoadPlate?: (plateId: string) => void
 }
@@ -166,12 +168,17 @@ export function MolecularValidation({
     if (!qcBanner.qcPassed) setCapaPlateId(activePlateId)
   }
 
-  const handleSubmitCapa = (form: CapaFormData) => {
+  // Each failed control gets its own CAPA, so only the uncovered ones are offered.
+  const capaFailures = capaPlate
+    ? uncoveredFailures(
+        capaPlate.qcFailures ?? failedControlsFromBanner(qcBanner),
+        capaPlate.capa.map((c) => c.control),
+      )
+    : failedControlsFromBanner(qcBanner)
+
+  const handleSubmitCapa = (form: CapaFormData, failure: PlateQcFailure) => {
     if (!capaPlateId) return
-    const summary = capaPlate?.qcFailureSummary
-      ?? qcBanner.failedControlWells.map((w) => `${w.controlType} failed in well ${w.wellId}`).join('; ')
-      ?? 'QC failure recorded on this plate.'
-    onRaiseCapa(capaPlateId, form, summary || 'QC failure recorded on this plate.')
+    onRaiseCapa(capaPlateId, form, failure)
     setCapaPlateId(null)
   }
 
@@ -185,6 +192,13 @@ export function MolecularValidation({
     (p) => p.plateId.toUpperCase() === activePlateId.toUpperCase(),
   )
   const plateStatus: PlateLifecycleStatus = activePlate?.status ?? 'Pending'
+  const activePlateFailures = activePlate
+    ? uncoveredFailures(
+        activePlate.qcFailures ?? failedControlsFromBanner(qcBanner),
+        activePlate.capa.map((c) => c.control),
+      )
+    : failedControlsFromBanner(qcBanner)
+  const canRaiseCapa = activePlateFailures.length > 0 && Boolean(activePlateId)
 
   const qcBannerClasses = qcBanner.qcPassed
     ? 'bg-emerald-50 border-emerald-200'
@@ -318,7 +332,7 @@ export function MolecularValidation({
           )}
         </div>
         <span className="ml-auto shrink-0 flex items-center gap-2">
-          {!qcBanner.qcPassed && (
+          {canRaiseCapa && (
             <button
               type="button"
               onClick={() => setCapaPlateId(activePlateId)}
@@ -367,7 +381,7 @@ export function MolecularValidation({
           )}
         </select>
         <div className="flex-1" />
-        {!qcBanner.qcPassed && activePlateId && (
+        {canRaiseCapa && (
           <button
             onClick={() => setCapaPlateId(activePlateId)}
             className="px-2.5 py-1.5 border border-amber-400 text-amber-700 rounded text-xs font-medium hover:bg-amber-50"
@@ -467,7 +481,7 @@ export function MolecularValidation({
             controlValidations={controlValidations}
             mappedTargetMetrics={mappedTargetMetrics}
             onClose={onCloseWell}
-            onAddCapa={activePlateId ? () => setCapaPlateId(activePlateId) : undefined}
+            onAddCapa={canRaiseCapa ? () => setCapaPlateId(activePlateId) : undefined}
           />
         )}
       </div>
@@ -498,14 +512,11 @@ export function MolecularValidation({
         />
       )}
 
-      {capaPlateId && (
+      {capaPlateId && capaFailures.length > 0 && (
         <CapaModal
           plateId={capaPlateId}
-          qcFailureSummary={
-            capaPlate?.qcFailureSummary
-            || qcBanner.failedControlWells.map((w) => `${w.controlType} failed in well ${w.wellId}`).join('; ')
-            || 'QC failure recorded on this plate.'
-          }
+          failures={capaFailures}
+          coveredLabels={capaPlate?.capa.map((c) => c.controlLabel) ?? []}
           skipLabel="Skip CAPA"
           onClose={() => setCapaPlateId(null)}
           onSkip={() => setCapaPlateId(null)}

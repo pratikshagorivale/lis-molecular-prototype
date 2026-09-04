@@ -5,6 +5,7 @@ import type {
   PlateAuditAction,
   PlateAuditEvent,
   PlateLifecycleStatus,
+  PlateQcFailure,
   PlateQcOutcome,
   PlateRecord,
   PlateSampleRef,
@@ -113,15 +114,17 @@ export function addCapaToPlate(
   registry: PlateRecord[],
   plateId: string,
   form: CapaFormData,
-  qcFailureSummary: string,
+  failure: PlateQcFailure,
 ): { registry: PlateRecord[]; capaId: string } {
   const capaId = nextCapaId(registry)
   const record: CapaRecord = {
     id: capaId,
     plateId,
+    control: failure.control,
+    controlLabel: failure.label,
     raisedBy: CURRENT_USER.name,
     raisedAt: new Date().toISOString(),
-    qcFailureSummary,
+    qcFailureSummary: failure.summary,
     rootCause: form.rootCause,
     correctiveAction: form.correctiveAction,
     preventiveAction: form.preventiveAction,
@@ -141,7 +144,7 @@ export function addCapaToPlate(
     registry: appendAuditEvent(
       withCapa,
       plateId,
-      createAuditEvent('capa-added', `${capaId} added against QC failure`),
+      createAuditEvent('capa-added', `${capaId} added against ${failure.label} failure`),
     ),
     capaId,
   }

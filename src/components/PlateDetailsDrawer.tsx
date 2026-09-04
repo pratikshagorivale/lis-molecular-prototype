@@ -3,6 +3,7 @@ import { Drawer } from './ui/Drawer'
 import { Badge } from './ui/Badge'
 import { PlateAuditTrail } from './PlateAuditTrail'
 import { formatAuditTimestamp } from '../utils/plateTracking'
+import { uncoveredFailures } from '../utils/qcFailures'
 import type { CapaRecord, PlateRecord } from '../types'
 import { PLATE_STATUS_VARIANT, QC_OUTCOME_VARIANT } from './plateStatusStyles'
 
@@ -37,6 +38,7 @@ function CapaCard({ capa }: { capa: CapaRecord }) {
         <span className="text-xs font-semibold text-slate-800">{capa.id}</span>
         <Badge variant={CAPA_STATUS_VARIANT[capa.status]}>{capa.status}</Badge>
       </div>
+      <p className="text-[11px] font-medium text-slate-600">{capa.controlLabel}</p>
       <p className="text-[11px] text-slate-500">
         Raised by <span className="font-medium text-slate-700">{capa.raisedBy}</span> on {formatAuditTimestamp(capa.raisedAt)}
       </p>
@@ -79,6 +81,8 @@ export function PlateDetailsDrawer({
   const [sampleSearch, setSampleSearch] = useState(highlightSampleId ?? '')
 
   const qcFailed = plate.qcOutcome !== 'Passed'
+  const failures = plate.qcFailures ?? []
+  const uncovered = uncoveredFailures(failures, plate.capa.map((c) => c.control))
   const filteredSamples = sampleSearch.trim()
     ? plate.samples.filter((s) =>
         [s.sampleId, s.accessionNumber, s.patient, s.wellId].some((v) =>
@@ -95,7 +99,7 @@ export function PlateDetailsDrawer({
       title={`Plate ${plate.plateId}`}
       footer={
         <div className="flex items-center justify-end gap-2">
-          {qcFailed && (
+          {uncovered.length > 0 && (
             <button
               onClick={() => onRaiseCapa(plate.plateId)}
               className="px-3 py-1.5 border border-amber-400 text-amber-700 rounded text-xs font-medium hover:bg-amber-50"
@@ -140,15 +144,24 @@ export function PlateDetailsDrawer({
             <Badge variant={QC_OUTCOME_VARIANT[plate.qcOutcome]}>QC {plate.qcOutcome}</Badge>
           </div>
 
-          {plate.qcFailureSummary && (
+          {failures.length > 0 && (
             <div className="bg-amber-50 border border-amber-200 rounded px-3 py-2">
-              <p className="text-[11px] font-semibold text-amber-800 uppercase tracking-wide">QC Failure</p>
-              <p className="text-xs text-amber-800 mt-0.5">{plate.qcFailureSummary}</p>
-              {plate.capa.length === 0 && (
-                <p className="text-[11px] text-amber-700 mt-1">
-                  No CAPA recorded for this failure. Raising one is optional.
-                </p>
-              )}
+              <p className="text-[11px] font-semibold text-amber-800 uppercase tracking-wide">
+                QC Failure{failures.length === 1 ? '' : `s (${failures.length})`}
+              </p>
+              <ul className="mt-1 space-y-1">
+                {failures.map((failure) => {
+                  const capa = plate.capa.find((c) => c.control === failure.control)
+                  return (
+                    <li key={failure.control} className="text-xs text-amber-800">
+                      <span className="font-medium">{failure.label}</span> — {failure.summary}
+                      <span className="block text-[11px] text-amber-700">
+                        {capa ? `${capa.id} · ${capa.status}` : 'No CAPA recorded — raising one is optional.'}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
             </div>
           )}
 
@@ -246,6 +259,12 @@ export function PlateDetailsDrawer({
 
       {tab === 'capa' && (
         <div className="space-y-3">
+          {plate.capa.length > 0 && uncovered.length > 0 && (
+            <p className="text-[11px] text-amber-700">
+              {uncovered.length} failed control{uncovered.length === 1 ? '' : 's'} without a CAPA:{' '}
+              {uncovered.map((f) => f.label).join(', ')}
+            </p>
+          )}
           {plate.capa.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-xs text-slate-500">No CAPA recorded for this plate.</p>
@@ -254,7 +273,7 @@ export function PlateDetailsDrawer({
                   ? 'This plate has a QC failure. Recording a CAPA is optional but recommended.'
                   : 'CAPA is normally raised only against a QC failure.'}
               </p>
-              {qcFailed && (
+              {uncovered.length > 0 && (
                 <button
                   onClick={() => onRaiseCapa(plate.plateId)}
                   className="mt-3 px-3 py-1.5 border border-amber-400 text-amber-700 rounded text-xs font-medium hover:bg-amber-50"

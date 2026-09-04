@@ -214,6 +214,14 @@ export type PlateQcOutcome = 'Passed' | 'Failed'
 /** Control types a plate's QC can fail on. IC is measured inside sample wells. */
 export type PlateControlKey = 'PC' | 'NC' | 'NTC' | 'IC'
 
+/** One control that failed on a plate. A plate can have several. */
+export interface PlateQcFailure {
+  control: PlateControlKey
+  /** Display name including well position, e.g. "Positive Control (H10)". */
+  label: string
+  summary: string
+}
+
 /** The only actions the audit trail captures. */
 export type PlateAuditAction =
   | 'uploaded'
@@ -250,6 +258,9 @@ export type CapaStatus = 'Open' | 'In Progress' | 'Closed'
 export interface CapaRecord {
   id: string
   plateId: string
+  /** The control this CAPA answers — one CAPA per failed control. */
+  control: PlateControlKey
+  controlLabel: string
   raisedBy: string
   raisedAt: string
   qcFailureSummary: string
@@ -280,9 +291,8 @@ export interface PlateRecord {
   samplesInvalid: number
   status: PlateLifecycleStatus
   qcOutcome: PlateQcOutcome
-  qcFailureSummary?: string
-  /** Which control failed — drives the QC banner and the failing well in Plate View. */
-  failedControl?: PlateControlKey
+  /** Every control that failed — drives the QC banner, Plate View, and CAPA scoping. */
+  qcFailures?: PlateQcFailure[]
   uploadedBy: string
   uploadedAt: string
   releasedBy?: string

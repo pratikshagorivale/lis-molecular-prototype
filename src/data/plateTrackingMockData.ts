@@ -1,4 +1,5 @@
 import { buildPlateWells } from './mockData'
+import { failedControlsFromBanner } from '../utils/qcFailures'
 import type {
   AuditQcResult,
   CapaRecord,
@@ -91,6 +92,8 @@ function qcEvent(timestamp: string, results: AuditQcResult[]): PlateAuditEvent {
 const CAPA_PLATE7: CapaRecord = {
   id: 'CAPA-2026-014',
   plateId: 'PLATE 7',
+  control: 'NTC',
+  controlLabel: 'NTC (H12)',
   raisedBy: 'Anjali Verma',
   raisedAt: '2026-08-05T14:20:00',
   qcFailureSummary: 'NTC amplification detected in well H12 (Ct 32.4) — possible carryover contamination.',
@@ -107,6 +110,8 @@ const CAPA_PLATE7: CapaRecord = {
 const CAPA_MU1: CapaRecord = {
   id: 'CAPA-2026-015',
   plateId: 'MU1',
+  control: 'IC',
+  controlLabel: 'Internal Control',
   raisedBy: 'Pratiksha Gorivale',
   raisedAt: '2026-08-04T17:45:00',
   qcFailureSummary: 'Internal Control below cut-off in the flagged sample wells — suspected inhibition.',
@@ -152,8 +157,18 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
     samplesInvalid: 44,
     status: 'Pending',
     qcOutcome: 'Failed',
-    failedControl: 'PC',
-    qcFailureSummary: 'Positive Control (H10) did not amplify — no Ct value returned.',
+    qcFailures: [
+      {
+        control: 'PC',
+        label: 'Positive Control (H10)',
+        summary: 'Positive Control did not amplify — no Ct value returned.',
+      },
+      {
+        control: 'NTC',
+        label: 'NTC (H12)',
+        summary: 'NTC amplified at Ct 30.8 — expected Not Detected.',
+      },
+    ],
     uploadedBy: 'Pratiksha Gorivale',
     uploadedAt: '2026-08-07T08:15:00',
     samples: buildSamples(727500, 44, 44),
@@ -163,7 +178,7 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
       qcEvent('2026-08-07T08:15:04', [
         { control: 'Positive Control (H10)', passed: false, detail: 'Undetermined — no amplification' },
         { control: 'Negative Control (H11)', passed: true, detail: 'Not Detected as expected' },
-        { control: 'NTC', passed: true, detail: 'Not Detected as expected' },
+        { control: 'NTC (H12)', passed: false, detail: 'Amplified at Ct 30.8 — expected Not Detected' },
       ]),
     ],
     capa: [],
@@ -200,8 +215,13 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
     samplesInvalid: 6,
     status: 'Partially Released',
     qcOutcome: 'Failed',
-    failedControl: 'NTC',
-    qcFailureSummary: 'NTC amplification detected in well H12 (Ct 32.4).',
+    qcFailures: [
+      {
+        control: 'NTC',
+        label: 'NTC (H12)',
+        summary: 'NTC amplified at Ct 32.4 — expected Not Detected.',
+      },
+    ],
     uploadedBy: 'Anjali Verma',
     uploadedAt: '2026-08-05T08:40:00',
     releasedBy: 'Dr. S. Raghavan',
@@ -233,8 +253,13 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
     samplesInvalid: 4,
     status: 'Pending',
     qcOutcome: 'Failed',
-    failedControl: 'IC',
-    qcFailureSummary: 'Internal Control below cut-off in the 4 flagged sample wells.',
+    qcFailures: [
+      {
+        control: 'IC',
+        label: 'Internal Control',
+        summary: 'Internal Control below cut-off in the flagged sample wells — suspected inhibition.',
+      },
+    ],
     uploadedBy: 'Pratiksha Gorivale',
     uploadedAt: '2026-08-04T11:05:00',
     samples: buildSamples(727200, 72, 4),
@@ -311,8 +336,13 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
     samplesInvalid: 24,
     status: 'Rejected',
     qcOutcome: 'Failed',
-    failedControl: 'PC',
-    qcFailureSummary: 'Positive Control (H10) failed to amplify — no Ct value returned.',
+    qcFailures: [
+      {
+        control: 'PC',
+        label: 'Positive Control (H10)',
+        summary: 'Positive Control failed to amplify — no Ct value returned.',
+      },
+    ],
     uploadedBy: 'Pratiksha Gorivale',
     uploadedAt: '2026-08-01T15:18:00',
     rejectedBy: 'Dr. S. Raghavan',
@@ -335,6 +365,8 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
       {
         id: 'CAPA-2026-013',
         plateId: 'QS5-01',
+        control: 'PC',
+        controlLabel: 'Positive Control (H10)',
         raisedBy: 'Pratiksha Gorivale',
         raisedAt: '2026-08-01T16:30:00',
         qcFailureSummary: 'Positive Control failed to amplify — no Ct value returned.',
@@ -392,6 +424,11 @@ export function mergeUploadIntoRegistry(
   const existing = registry.find((p) => p.plateId.toUpperCase() === plateId.toUpperCase())
   const rest = registry.filter((p) => p.plateId.toUpperCase() !== plateId.toUpperCase())
 
+  // Re-derive from the live banner, but keep the wording already recorded for a control.
+  const qcFailures = failedControlsFromBanner(uploadData.qcBanner).map((derived) =>
+    existing?.qcFailures?.find((f) => f.control === derived.control) ?? derived,
+  )
+
   const samples: PlateSampleRef[] = uploadData.sampleGroups.map((group) => ({
     sampleId: group.sampleId,
     accessionNumber: group.testOrder,
@@ -401,7 +438,15 @@ export function mergeUploadIntoRegistry(
   }))
 
   const current: PlateRecord = existing
-    ? { ...existing, samplesProcessed: processed, samplesValid: valid, samplesInvalid: invalid, qcOutcome, samples }
+    ? {
+        ...existing,
+        samplesProcessed: processed,
+        samplesValid: valid,
+        samplesInvalid: invalid,
+        qcOutcome,
+        qcFailures,
+        samples,
+      }
     : {
         plateId,
         runDate: uploadData.plateSummary.runDate,
@@ -411,9 +456,7 @@ export function mergeUploadIntoRegistry(
         samplesInvalid: invalid,
         status: 'Pending',
         qcOutcome,
-        qcFailureSummary: uploadData.qcBanner.qcPassed
-          ? undefined
-          : uploadData.qcBanner.failedControlWells.map((w) => `${w.controlType} failed in ${w.wellId}`).join('; '),
+        qcFailures,
         uploadedBy: CURRENT_USER.name,
         uploadedAt,
         samples,

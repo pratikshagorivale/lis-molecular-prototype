@@ -41,6 +41,7 @@ import type {
   InstrumentControlConfig,
   ManagedInstrument,
   ParsedUploadData,
+  PlateQcFailure,
   PlateRecord,
   PlateSize,
   PreviewRow,
@@ -287,14 +288,14 @@ function App() {
     setToast(`Plate ${rejectPlateId} rejected. Reason recorded in the audit trail.`)
   }, [updateRegistry])
 
-  const handleRaiseCapa = useCallback((capaPlateId: string, form: CapaFormData, qcFailureSummary: string) => {
+  const handleRaiseCapa = useCallback((capaPlateId: string, form: CapaFormData, failure: PlateQcFailure) => {
     let capaId = ''
     updateRegistry((prev) => {
-      const result = addCapaToPlate(prev, capaPlateId, form, qcFailureSummary)
+      const result = addCapaToPlate(prev, capaPlateId, form, failure)
       capaId = result.capaId
       return result.registry
     })
-    setToast(`${capaId || 'CAPA'} recorded against Plate ${capaPlateId}.`)
+    setToast(`${capaId || 'CAPA'} recorded against ${failure.label} on Plate ${capaPlateId}.`)
   }, [updateRegistry])
 
   const handleContinueToValidation = useCallback((selectionRows: PreviewRow[]) => {

@@ -179,7 +179,9 @@ function controlWell(
     controlValidations: [],
     ctValues: [{ target, ct, interpretation }],
     validationChecks: [],
-    validationErrors: failed ? [plate.qcFailureSummary ?? `${control} outside configured limits`] : undefined,
+    validationErrors: failed
+      ? [plate.qcFailures?.find((f) => f.control === control)?.summary ?? `${control} outside configured limits`]
+      : undefined,
     isFailed: false,
     controlFailed: failed,
     controlsPassed: !failed,
@@ -242,32 +244,40 @@ function sampleGroupFor(well: WellData, sample: PlateSampleRef, plate: PlateReco
 }
 
 function bannerFor(plate: PlateRecord, icFailedWells: string[]): QcBanner {
-  const failed = plate.qcOutcome === 'Failed' ? plate.failedControl ?? 'PC' : undefined
+  const failed = failedControlKeys(plate)
+  const has = (key: PlateControlKey) => failed.includes(key)
+
+  const failedControlWells = failed.flatMap((key) => (
+    key === 'IC'
+      ? icFailedWells.map((wellId) => ({ wellId, controlType: 'IC', sampleId: '', label: 'IC' }))
+      : [{ wellId: CONTROL_WELLS[key], controlType: key, sampleId: key, label: key }]
+  ))
 
   return {
-    pcPassed: failed !== 'PC',
-    ncPassed: failed !== 'NC',
-    ntcPassed: failed !== 'NTC',
-    icPassed: failed !== 'IC',
+    pcPassed: !has('PC'),
+    ncPassed: !has('NC'),
+    ntcPassed: !has('NTC'),
+    icPassed: !has('IC'),
     pcPresent: true,
     ncPresent: true,
     ntcPresent: true,
-    icPresent: failed === 'IC',
-    qcPassed: !failed,
-    failedControlWells: !failed
-      ? []
-      : failed === 'IC'
-        ? icFailedWells.map((wellId) => ({ wellId, controlType: 'IC', sampleId: '', label: 'IC' }))
-        : [{ wellId: CONTROL_WELLS[failed], controlType: failed, sampleId: failed, label: failed }],
-    status: failed ? 'Needs review' : 'Valid',
+    icPresent: has('IC'),
+    qcPassed: failed.length === 0,
+    failedControlWells,
+    status: failed.length > 0 ? 'Needs review' : 'Valid',
   }
+}
+
+function failedControlKeys(plate: PlateRecord): PlateControlKey[] {
+  if (plate.qcOutcome !== 'Failed') return []
+  return (plate.qcFailures ?? []).map((failure) => failure.control)
 }
 
 /** Build a full validation payload from a registry plate, so its own samples are shown. */
 export function buildUploadDataForPlate(plate: PlateRecord): ParsedUploadData {
-  const failedControl = plate.qcOutcome === 'Failed' ? plate.failedControl ?? 'PC' : undefined
+  const failed = failedControlKeys(plate)
   // An Internal Control failure is measured inside sample wells, not a dedicated control well.
-  const icFailedWells = failedControl === 'IC'
+  const icFailedWells = failed.includes('IC')
     ? plate.samples.filter((s) => s.status !== 'Ready for Release').map((s) => s.wellId)
     : []
   const icFailedSet = new Set(icFailedWells)
@@ -276,7 +286,7 @@ export function buildUploadDataForPlate(plate: PlateRecord): ParsedUploadData {
   const wellsById = new Map(sampleWells.map((w) => [w.wellId, w]))
 
   for (const key of ['PC', 'NC', 'NTC'] as const) {
-    wellsById.set(CONTROL_WELLS[key], controlWell(key, plate, failedControl === key))
+    wellsById.set(CONTROL_WELLS[key], controlWell(key, plate, failed.includes(key)))
   }
 
   const plateWells: WellData[] = []
