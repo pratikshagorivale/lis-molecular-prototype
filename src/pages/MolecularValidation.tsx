@@ -325,16 +325,7 @@ export function MolecularValidation({
             </span>
           )}
         </div>
-        <span className="ml-auto shrink-0 flex items-center gap-2">
-          {canRaiseCapa && (
-            <button
-              type="button"
-              onClick={() => setCapaPlateId(activePlateId)}
-              className="px-2 py-0.5 border border-amber-400 text-amber-800 rounded text-[11px] font-medium hover:bg-amber-100"
-            >
-              Raise CAPA
-            </button>
-          )}
+        <span className="ml-auto shrink-0">
           <Badge variant={PLATE_STATUS_VARIANT[plateStatus]} size="sm">
             {plateStatus}
           </Badge>
