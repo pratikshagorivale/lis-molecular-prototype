@@ -209,7 +209,7 @@ export type PlateLifecycleStatus =
   | 'Released'
   | 'Rejected'
 
-export type PlateQcOutcome = 'Passed' | 'Warning' | 'Failed'
+export type PlateQcOutcome = 'Passed' | 'Failed'
 
 export type PlateAuditAction =
   | 'uploaded'

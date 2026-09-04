@@ -5,6 +5,7 @@ import type {
   PlateAuditAction,
   PlateAuditEvent,
   PlateLifecycleStatus,
+  PlateQcOutcome,
   PlateRecord,
   PlateSampleRef,
 } from '../types'
@@ -19,13 +20,22 @@ function normalizeStatus(status: string): PlateLifecycleStatus {
   return 'Pending'
 }
 
+/** QC is pass/fail only — anything else stored (e.g. the old 'Warning') counts as a failure. */
+function normalizeQcOutcome(outcome: string): PlateQcOutcome {
+  return outcome === 'Passed' ? 'Passed' : 'Failed'
+}
+
 export function loadPlateRegistry(): PlateRecord[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return PLATE_REGISTRY_MOCK
     const parsed = JSON.parse(raw) as PlateRecord[]
     if (!Array.isArray(parsed) || parsed.length === 0) return PLATE_REGISTRY_MOCK
-    return parsed.map((plate) => ({ ...plate, status: normalizeStatus(plate.status) }))
+    return parsed.map((plate) => ({
+      ...plate,
+      status: normalizeStatus(plate.status),
+      qcOutcome: normalizeQcOutcome(plate.qcOutcome),
+    }))
   } catch {
     return PLATE_REGISTRY_MOCK
   }

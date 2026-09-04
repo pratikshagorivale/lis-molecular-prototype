@@ -17,7 +17,7 @@ const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
 
 const QC_FILTERS: { value: QcFilter; label: string }[] = [
   { value: 'all', label: 'All QC' },
-  { value: 'failed-only', label: 'QC Failed / Warning' },
+  { value: 'failed-only', label: 'QC Failed' },
   { value: 'capa-open', label: 'CAPA Open' },
 ]
 

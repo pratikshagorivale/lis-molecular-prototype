@@ -11,6 +11,5 @@ export const PLATE_STATUS_VARIANT: Record<PlateLifecycleStatus, BadgeVariant> = 
 
 export const QC_OUTCOME_VARIANT: Record<PlateQcOutcome, BadgeVariant> = {
   Passed: 'success',
-  Warning: 'warning',
   Failed: 'error',
 }
