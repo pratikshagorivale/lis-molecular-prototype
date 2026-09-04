@@ -198,7 +198,6 @@ export function PlateDetailsDrawer({
               <thead>
                 <tr className="bg-slate-700 text-white">
                   <th className="px-2 py-1.5 text-left font-medium">Sample ID</th>
-                  <th className="px-2 py-1.5 text-left font-medium">Accession</th>
                   <th className="px-2 py-1.5 text-left font-medium">Patient</th>
                   <th className="px-2 py-1.5 text-left font-medium">Well</th>
                   <th className="px-2 py-1.5 text-left font-medium">Status</th>
@@ -213,7 +212,6 @@ export function PlateDetailsDrawer({
                     }`}
                   >
                     <td className="px-2 py-1.5 font-medium text-slate-800 tabular-nums">{sample.sampleId}</td>
-                    <td className="px-2 py-1.5 text-slate-600">{sample.accessionNumber}</td>
                     <td className="px-2 py-1.5 text-slate-600">{sample.patient}</td>
                     <td className="px-2 py-1.5 text-slate-600">{sample.wellId}</td>
                     <td className="px-2 py-1.5">
@@ -233,7 +231,7 @@ export function PlateDetailsDrawer({
                 ))}
                 {filteredSamples.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-2 py-6 text-center text-slate-500">
+                    <td colSpan={4} className="px-2 py-6 text-center text-slate-500">
                       No samples match “{sampleSearch}”
                     </td>
                   </tr>
