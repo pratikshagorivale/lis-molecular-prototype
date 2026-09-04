@@ -22,6 +22,7 @@ import { UploadMolecularResultsModal } from './components/UploadMolecularResults
 import { ReleaseConfirmationModal } from './components/ReleaseConfirmationModal'
 import { Toast } from './components/ui/Toast'
 import { buildDemoUploadData } from './data/demoUploadData'
+import { buildUploadDataForPlate } from './data/plateUploadData'
 import { loadLisRegistry } from './data/lisSampleRegistry'
 import {
   readSpreadsheetFile,
@@ -306,10 +307,15 @@ function App() {
   }, [uploadData, molecularControls, updateRegistry])
 
   const handleOpenMolecularValidation = useCallback(() => {
-    setUploadData((prev) => prev ?? buildDemoUploadData())
+    setUploadData((prev) => {
+      if (prev) return prev
+      // One dataset per plate, so the grid always matches that plate's registry samples.
+      const first = plateRegistry.find((p) => p.plateId === 'AB1P') ?? plateRegistry[0]
+      return first ? buildUploadDataForPlate(first) : buildDemoUploadData()
+    })
     setSelectedWell(null)
     setScreen('validation')
-  }, [])
+  }, [plateRegistry])
 
   /**
    * Swap the validation view to another plate from the registry. Skipped once a real
@@ -320,10 +326,7 @@ function App() {
     if (!nextPlateId || uploadData?.plateSummary.plateId === nextPlateId) return
     const plate = plateRegistry.find((p) => p.plateId.toUpperCase() === nextPlateId.toUpperCase())
     if (!plate) return
-    setUploadData(buildDemoUploadData(plate.plateId, {
-      qcFailed: plate.qcOutcome === 'Failed',
-      runDate: plate.runDate,
-    }))
+    setUploadData(buildUploadDataForPlate(plate))
     setSelectedWell(null)
   }, [fileContext, uploadData, plateRegistry])
 

@@ -211,6 +211,9 @@ export type PlateLifecycleStatus =
 
 export type PlateQcOutcome = 'Passed' | 'Failed'
 
+/** Control types a plate's QC can fail on. IC is measured inside sample wells. */
+export type PlateControlKey = 'PC' | 'NC' | 'NTC' | 'IC'
+
 /** The only actions the audit trail captures. */
 export type PlateAuditAction =
   | 'uploaded'
@@ -278,6 +281,8 @@ export interface PlateRecord {
   status: PlateLifecycleStatus
   qcOutcome: PlateQcOutcome
   qcFailureSummary?: string
+  /** Which control failed — drives the QC banner and the failing well in Plate View. */
+  failedControl?: PlateControlKey
   uploadedBy: string
   uploadedAt: string
   releasedBy?: string
