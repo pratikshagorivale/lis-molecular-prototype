@@ -71,7 +71,6 @@ export function formatAuditTimestamp(iso: string): string {
 export function createAuditEvent(
   action: PlateAuditAction,
   summary: string,
-  detail?: string,
   sampleIds?: string[],
 ): PlateAuditEvent {
   return {
@@ -81,7 +80,6 @@ export function createAuditEvent(
     actorRole: CURRENT_USER.role,
     timestamp: new Date().toISOString(),
     summary,
-    detail,
     sampleIds,
   }
 }
@@ -143,11 +141,7 @@ export function addCapaToPlate(
     registry: appendAuditEvent(
       withCapa,
       plateId,
-      createAuditEvent(
-        'capa-added',
-        `${capaId} added against QC failure`,
-        form.rootCause ? `Root cause recorded as: ${form.rootCause}` : 'Added without a root cause recorded.',
-      ),
+      createAuditEvent('capa-added', `${capaId} added against QC failure`),
     ),
     capaId,
   }

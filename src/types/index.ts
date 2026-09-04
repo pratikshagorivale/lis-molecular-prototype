@@ -235,7 +235,6 @@ export interface PlateAuditEvent {
   /** ISO 8601 timestamp — formatted for display at render time. */
   timestamp: string
   summary: string
-  detail?: string
   /** Individual control outcomes — only on 'qc-result' events. */
   qcResults?: AuditQcResult[]
   /** Sample IDs the event applied to, when it was scoped to a subset of the plate. */

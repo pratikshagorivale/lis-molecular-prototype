@@ -239,37 +239,27 @@ function App() {
     setReleaseModalOpen(false)
     const releasedPlateId = uploadData?.plateSummary.plateId?.trim() ?? ''
 
-    const { count, summary, status } = releaseMode === 'valid-only'
+    const { summary, status } = releaseMode === 'valid-only'
       ? {
-          count: releaseCounts.validCount,
-          summary: `Released ${releaseCounts.validCount} valid sample${releaseCounts.validCount === 1 ? '' : 's'} to LIS reports`,
+          summary: `Released ${releaseCounts.validCount} of ${releaseCounts.totalCount} samples to LIS reports`,
           status: 'Partially Released' as const,
         }
       : releaseMode === 'plate'
         ? {
-            count: releaseCounts.totalCount,
             summary: `Released all ${releaseCounts.totalCount} sample${releaseCounts.totalCount === 1 ? '' : 's'} to LIS reports`,
             status: 'Released' as const,
           }
         : {
-            count: releaseCounts.validCount,
             summary: 'Released selected sample results to LIS reports',
             status: 'Partially Released' as const,
           }
 
     if (releasedPlateId) {
-      const excluded = Math.max(0, releaseCounts.totalCount - count)
       updateRegistry((prev) => appendAuditEvent(
         prev,
         releasedPlateId,
         // A partial release is still a release event — only the plate status differs.
-        createAuditEvent(
-          'released',
-          summary,
-          excluded > 0
-            ? `${excluded} sample${excluded === 1 ? '' : 's'} excluded — needs review, failed validation, or not selected.`
-            : undefined,
-        ),
+        createAuditEvent('released', summary),
         { status, releasedBy: CURRENT_USER.name, releasedAt: new Date().toISOString() },
       ))
     }
@@ -290,7 +280,7 @@ function App() {
     updateRegistry((prev) => appendAuditEvent(
       prev,
       rejectPlateId,
-      createAuditEvent('rejected', 'Plate rejected — results withheld from LIS', `Reason: ${reason}`),
+      createAuditEvent('rejected', `Plate rejected — ${reason}`),
       { status: 'Rejected', rejectedBy: CURRENT_USER.name, rejectedAt: new Date().toISOString() },
     ))
     setToast(`Plate ${rejectPlateId} rejected. Reason recorded in the audit trail.`)

@@ -66,7 +66,6 @@ export function PlateAuditTrail({ entries }: PlateAuditTrailProps) {
               <span className="text-[11px] text-slate-400">{formatAuditTimestamp(entry.timestamp)}</span>
             </div>
             <p className="text-xs text-slate-700 mt-0.5">{entry.summary}</p>
-            {entry.detail && <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">{entry.detail}</p>}
             {entry.qcResults && entry.qcResults.length > 0 && <QcResultList results={entry.qcResults} />}
             <p className="text-[11px] text-slate-500 mt-1">
               <span className="font-medium text-slate-600">{entry.actor}</span>
