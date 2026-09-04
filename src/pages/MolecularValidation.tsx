@@ -33,6 +33,16 @@ const DEVICE_TABS: { id: DeviceValidationTab; label: string }[] = [
   { id: 'qc', label: 'QC' },
 ]
 
+/**
+ * Samples still awaiting a decision. A released or rejected plate has none; a
+ * partially released one has only the samples that were held back.
+ */
+function pendingSampleCount(plate: PlateRecord): number {
+  if (plate.status === 'Released' || plate.status === 'Rejected') return 0
+  if (plate.status === 'Partially Released') return plate.samplesInvalid
+  return plate.samplesProcessed
+}
+
 function failedWellsCompact(failed: FailedControlWell[] | undefined, controlType: string): string {
   const wells = (failed ?? []).filter((f) => f.controlType === controlType)
   if (wells.length === 0) return ''
@@ -189,6 +199,14 @@ export function MolecularValidation({
     (p) => p.plateId.toUpperCase() === activePlateId.toUpperCase(),
   )
   const plateStatus: PlateLifecycleStatus = activePlate?.status ?? 'Pending'
+  // Molecular counts the samples pending on this plate; All Plates counts the plates with any.
+  const tabPendingCounts: Record<DeviceValidationTab, number> = {
+    molecular: activePlate ? pendingSampleCount(activePlate) : 0,
+    'all-plates': allPlates.filter((plate) => pendingSampleCount(plate) > 0).length,
+    pathology: 0,
+    qc: 0,
+  }
+
   const activePlateFailures = activePlate
     ? uncoveredFailures(failuresFromControls(activePlate.qcControls), activePlate.capa.map((c) => c.control))
     : failuresFromControls(controlsFromBanner(qcBanner))
@@ -261,7 +279,7 @@ export function MolecularValidation({
                   : 'border-transparent text-slate-500 hover:text-slate-700'
               }`}
             >
-              {tab.label}
+              {tab.label} ({tabPendingCounts[tab.id]})
             </button>
           ))}
         </nav>
