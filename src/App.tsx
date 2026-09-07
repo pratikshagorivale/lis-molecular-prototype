@@ -8,11 +8,22 @@ import { InstrumentManagementListPage } from './pages/InstrumentManagementListPa
 import { InstrumentDetailPage } from './pages/InstrumentDetailPage'
 import { partiallyCompletedEntries } from './data/waitingListMockData'
 import { loadManagedInstruments, saveManagedInstruments } from './utils/instrumentStorage'
+import {
+  addCapaToPlate,
+  appendAuditEvent,
+  closeCapaOnPlate,
+  createAuditEvent,
+  loadPlateRegistry,
+  savePlateRegistry,
+} from './utils/plateTracking'
+import { CURRENT_USER, mergeUploadIntoRegistry } from './data/plateTrackingMockData'
 import { buildMolecularReportFromUpload, resolveWaitingEntryForUpload } from './utils/sendResultsToReport'
 import type { MolecularReportData } from './types'
 import { UploadMolecularResultsModal } from './components/UploadMolecularResultsModal'
 import { ReleaseConfirmationModal } from './components/ReleaseConfirmationModal'
 import { Toast } from './components/ui/Toast'
+import { buildDemoUploadData } from './data/demoUploadData'
+import { buildUploadDataForPlate } from './data/plateUploadData'
 import { loadLisRegistry } from './data/lisSampleRegistry'
 import {
   readSpreadsheetFile,
@@ -26,10 +37,13 @@ import { filterUploadDataBySelection } from './utils/filterUploadBySelection'
 import { countReleaseableSamples } from './utils/releaseSamples'
 import type {
   AppNav,
+  CapaFormData,
   FileParseContext,
   InstrumentControlConfig,
   ManagedInstrument,
   ParsedUploadData,
+  PlateQcFailure,
+  PlateRecord,
   PlateSize,
   PreviewRow,
   QcView,
@@ -66,6 +80,16 @@ function App() {
   const [qcView, setQcView] = useState<QcView>('list')
   const [managedInstruments, setManagedInstruments] = useState<ManagedInstrument[]>(() => loadManagedInstruments())
   const [selectedManagedInstrumentId, setSelectedManagedInstrumentId] = useState<string | null>(null)
+  const [plateRegistry, setPlateRegistry] = useState<PlateRecord[]>(() => loadPlateRegistry())
+
+  /** Single write path for the registry so every audit entry is persisted the same way. */
+  const updateRegistry = useCallback((updater: (prev: PlateRecord[]) => PlateRecord[]) => {
+    setPlateRegistry((prev) => {
+      const next = updater(prev)
+      savePlateRegistry(next)
+      return next
+    })
+  }, [])
 
   useEffect(() => {
     loadLisRegistry()
@@ -216,6 +240,33 @@ function App() {
 
   const handleConfirmRelease = useCallback(() => {
     setReleaseModalOpen(false)
+    const releasedPlateId = uploadData?.plateSummary.plateId?.trim() ?? ''
+
+    const { summary, status } = releaseMode === 'valid-only'
+      ? {
+          summary: `Released ${releaseCounts.validCount} of ${releaseCounts.totalCount} samples to LIS reports`,
+          status: 'Partially Released' as const,
+        }
+      : releaseMode === 'plate'
+        ? {
+            summary: `Released all ${releaseCounts.totalCount} sample${releaseCounts.totalCount === 1 ? '' : 's'} to LIS reports`,
+            status: 'Released' as const,
+          }
+        : {
+            summary: 'Released selected sample results to LIS reports',
+            status: 'Partially Released' as const,
+          }
+
+    if (releasedPlateId) {
+      updateRegistry((prev) => appendAuditEvent(
+        prev,
+        releasedPlateId,
+        // A partial release is still a release event — only the plate status differs.
+        createAuditEvent('released', summary),
+        { status, releasedBy: CURRENT_USER.name, releasedAt: new Date().toISOString() },
+      ))
+    }
+
     if (releaseMode === 'valid-only') {
       setToast(`${releaseCounts.validCount} valid sample result${releaseCounts.validCount === 1 ? '' : 's'} released successfully.`)
       return
@@ -225,14 +276,61 @@ function App() {
       return
     }
     setToast('Selected results released successfully.')
-  }, [releaseMode, releaseCounts])
+  }, [releaseMode, releaseCounts, uploadData, updateRegistry])
+
+  const handleRejectPlate = useCallback((rejectPlateId: string, reason: string) => {
+    if (!rejectPlateId) return
+    updateRegistry((prev) => appendAuditEvent(
+      prev,
+      rejectPlateId,
+      createAuditEvent('rejected', `Plate rejected — ${reason}`),
+      { status: 'Rejected', rejectedBy: CURRENT_USER.name, rejectedAt: new Date().toISOString() },
+    ))
+    setToast(`Plate ${rejectPlateId} rejected. Reason recorded in the audit trail.`)
+  }, [updateRegistry])
+
+  const handleRaiseCapa = useCallback((capaPlateId: string, form: CapaFormData, failure: PlateQcFailure) => {
+    let capaId = ''
+    updateRegistry((prev) => {
+      const result = addCapaToPlate(prev, capaPlateId, form, failure)
+      capaId = result.capaId
+      return result.registry
+    })
+    setToast(`${capaId || 'CAPA'} recorded against ${failure.label} on Plate ${capaPlateId}.`)
+  }, [updateRegistry])
 
   const handleContinueToValidation = useCallback((selectionRows: PreviewRow[]) => {
     if (!uploadData) return
-    setUploadData(filterUploadDataBySelection(uploadData, selectionRows, { instrumentControls: molecularControls }))
+    const filtered = filterUploadDataBySelection(uploadData, selectionRows, { instrumentControls: molecularControls })
+    setUploadData(filtered)
+    updateRegistry((prev) => mergeUploadIntoRegistry(prev, filtered))
     setUploadModalOpen(false)
     setScreen('validation')
-  }, [uploadData, molecularControls])
+  }, [uploadData, molecularControls, updateRegistry])
+
+  const handleOpenMolecularValidation = useCallback(() => {
+    setUploadData((prev) => {
+      if (prev) return prev
+      // One dataset per plate, so the grid always matches that plate's registry samples.
+      const first = plateRegistry.find((p) => p.plateId === 'AB1P') ?? plateRegistry[0]
+      return first ? buildUploadDataForPlate(first) : buildDemoUploadData()
+    })
+    setSelectedWell(null)
+    setScreen('validation')
+  }, [plateRegistry])
+
+  /**
+   * Swap the validation view to another plate from the registry. Skipped once a real
+   * file is loaded, so an actual upload is never replaced by demo results.
+   */
+  const handleLoadPlate = useCallback((nextPlateId: string) => {
+    if (fileContext) return
+    if (!nextPlateId || uploadData?.plateSummary.plateId === nextPlateId) return
+    const plate = plateRegistry.find((p) => p.plateId.toUpperCase() === nextPlateId.toUpperCase())
+    if (!plate) return
+    setUploadData(buildUploadDataForPlate(plate))
+    setSelectedWell(null)
+  }, [fileContext, uploadData, plateRegistry])
 
   const handleSendResults = useCallback((selectionRows: PreviewRow[]) => {
     if (!uploadData) return
@@ -286,6 +384,11 @@ function App() {
     setToast('Control configuration saved.')
   }, [])
 
+  const handleCloseCapa = useCallback((capaPlateId: string, capaId: string) => {
+    updateRegistry((prev) => closeCapaOnPlate(prev, capaPlateId, capaId))
+    setToast(`${capaId} closed.`)
+  }, [updateRegistry])
+
   const handleOpenReport = useCallback((entry: WaitingListEntry) => {
     setSelectedWaitingEntry(entry)
     setWaitingView('report')
@@ -301,6 +404,7 @@ function App() {
       {activeNav === 'device-validation' && screen === 'home' && (
         <DeviceResultsValidationHome
           onUploadClick={handleUploadClick}
+          onOpenMolecular={handleOpenMolecularValidation}
           lastUploadedPlate={uploadData?.plateSummary.plateId}
           pendingValidation={uploadData?.validationSummary.validSamples}
         />
@@ -308,6 +412,7 @@ function App() {
       {activeNav === 'device-validation' && screen === 'validation' && uploadData && (
         <MolecularValidation
           uploadData={uploadData}
+          plateRegistry={plateRegistry}
           selectedWell={selectedWell}
           instrumentControls={managedInstruments.find((i) => i.isMolecular)?.controls ?? []}
           onCloseWell={() => setSelectedWell(null)}
@@ -317,6 +422,10 @@ function App() {
           onReleasePlate={handleReleasePlate}
           onReleaseValidOnly={handleReleaseValidOnly}
           onReleaseSelected={handleReleaseSelected}
+          onRejectPlate={handleRejectPlate}
+          onRaiseCapa={handleRaiseCapa}
+          onCloseCapa={handleCloseCapa}
+          onLoadPlate={handleLoadPlate}
         />
       )}
       {activeNav === 'waiting' && waitingView === 'list' && (

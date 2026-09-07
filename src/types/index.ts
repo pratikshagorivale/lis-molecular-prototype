@@ -202,6 +202,132 @@ export interface ValidationSummary {
   missingControls: number
 }
 
+/** Where a plate sits in its lifecycle — drives the All Plates status filter. */
+export type PlateLifecycleStatus =
+  | 'Pending'
+  | 'Partially Released'
+  | 'Released'
+  | 'Rejected'
+
+export type PlateQcOutcome = 'Passed' | 'Failed'
+
+/** Control types a plate's QC can fail on. IC is measured inside sample wells. */
+export type PlateControlKey = 'PC' | 'NC' | 'NTC' | 'IC'
+
+/**
+ * One control evaluated on a plate. This list is the single source of truth for
+ * QC — the plate banner, the plate Summary tab, the QC audit entry and CAPA
+ * scoping are all derived from it, so they cannot drift apart.
+ */
+export interface PlateQcControl {
+  control: PlateControlKey
+  /** Wells holding this control. Empty for IC, which is read inside sample wells. */
+  wells: string[]
+  passed: boolean
+  /** The reading behind the outcome, e.g. "Ct 22.8 — cut-off <= 30". */
+  detail?: string
+  /** Why it failed — pre-fills a CAPA raised against this control. */
+  summary?: string
+}
+
+/** A failed control, resolved for display and CAPA scoping. */
+export interface PlateQcFailure {
+  control: PlateControlKey
+  /** Display name including well position, e.g. "Positive Control (H10)". */
+  label: string
+  summary: string
+}
+
+/** The only actions the audit trail captures. */
+export type PlateAuditAction =
+  | 'uploaded'
+  | 'qc-result'
+  | 'released'
+  | 'rejected'
+  | 'capa-added'
+
+/** Per-control outcome shown under a QC Results event. */
+export interface AuditQcResult {
+  control: string
+  passed: boolean
+  detail?: string
+}
+
+/** One immutable entry in a plate's audit trail. */
+export interface PlateAuditEvent {
+  id: string
+  action: PlateAuditAction
+  actor: string
+  actorRole: string
+  /** ISO 8601 timestamp — formatted for display at render time. */
+  timestamp: string
+  summary: string
+  /** Individual control outcomes — only on 'qc-result' events. */
+  qcResults?: AuditQcResult[]
+  /** Sample IDs the event applied to, when it was scoped to a subset of the plate. */
+  sampleIds?: string[]
+}
+
+export type CapaStatus = 'Open' | 'In Progress' | 'Closed'
+
+/** Corrective and Preventive Action raised against a QC failure. Always optional. */
+export interface CapaRecord {
+  id: string
+  plateId: string
+  /** The control this CAPA answers — one CAPA per failed control. */
+  control: PlateControlKey
+  controlLabel: string
+  raisedBy: string
+  raisedAt: string
+  qcFailureSummary: string
+  rootCause: string
+  correctiveAction: string
+  preventiveAction: string
+  status: CapaStatus
+  closedBy?: string
+  closedAt?: string
+}
+
+/** Sample-level index entry so a plate can be traced back from a Sample ID. */
+export interface PlateSampleRef {
+  sampleId: string
+  accessionNumber: string
+  patient: string
+  wellId: string
+  status: SampleStatus
+}
+
+/** One plate in the tracking registry — every plate, not only pending ones. */
+export interface PlateRecord {
+  plateId: string
+  runDate: string
+  instrument: string
+  samplesProcessed: number
+  samplesValid: number
+  samplesInvalid: number
+  status: PlateLifecycleStatus
+  qcOutcome: PlateQcOutcome
+  /** Every control evaluated on this plate, passed and failed alike. */
+  qcControls: PlateQcControl[]
+  uploadedBy: string
+  uploadedAt: string
+  releasedBy?: string
+  releasedAt?: string
+  rejectedBy?: string
+  rejectedAt?: string
+  samples: PlateSampleRef[]
+  auditTrail: PlateAuditEvent[]
+  capa: CapaRecord[]
+}
+
+/** Draft captured by the CAPA form before it becomes a CapaRecord. */
+export interface CapaFormData {
+  rootCause: string
+  correctiveAction: string
+  preventiveAction: string
+  status: CapaStatus
+}
+
 export interface ActivityLogEntry {
   time: string
   message: string

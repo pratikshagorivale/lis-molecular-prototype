@@ -4,18 +4,32 @@ import type { InstrumentCard } from '../types'
 
 interface DeviceResultsValidationHomeProps {
   onUploadClick: () => void
+  onOpenMolecular?: () => void
   lastUploadedPlate?: string
   pendingValidation?: number
 }
 
-function InstrumentCardComponent({ card, onUpload }: { card: InstrumentCard; onUpload?: () => void }) {
+function InstrumentCardComponent({
+  card,
+  onUpload,
+  onOpen,
+}: {
+  card: InstrumentCard
+  onUpload?: () => void
+  onOpen?: () => void
+}) {
   return (
     <div className={`bg-white border border-slate-200 rounded shadow-sm border-l-4 ${card.borderColor} flex flex-col`}>
       <div className="px-3 py-2 border-b border-slate-100 flex items-start justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-800">{card.name}</h3>
+        <button
+          type="button"
+          onClick={onOpen}
+          className={`text-left ${onOpen ? 'hover:opacity-80' : ''}`}
+          disabled={!onOpen}
+        >
+          <h3 className={`text-sm font-semibold ${onOpen ? 'text-blue-700' : 'text-slate-800'}`}>{card.name}</h3>
           <p className="text-[11px] text-slate-500">{card.category}</p>
-        </div>
+        </button>
         <button className="p-1 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-50">
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -51,24 +65,41 @@ function InstrumentCardComponent({ card, onUpload }: { card: InstrumentCard; onU
         </div>
       </div>
 
-      {card.isMolecular && onUpload && (
-        <div className="px-3 py-2 border-t border-slate-100">
-          <button
-            onClick={onUpload}
-            className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 border border-blue-500 text-blue-600 rounded text-xs font-medium hover:bg-blue-50 transition-colors"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
-            Upload Results
-          </button>
+      {card.isMolecular && (onUpload || onOpen) && (
+        <div className="px-3 py-2 border-t border-slate-100 flex flex-col gap-1.5">
+          {onOpen && (
+            <button
+              type="button"
+              onClick={onOpen}
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 transition-colors"
+            >
+              Open Validation
+            </button>
+          )}
+          {onUpload && (
+            <button
+              type="button"
+              onClick={onUpload}
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 border border-blue-500 text-blue-600 rounded text-xs font-medium hover:bg-blue-50 transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              Upload Results
+            </button>
+          )}
         </div>
       )}
     </div>
   )
 }
 
-export function DeviceResultsValidationHome({ onUploadClick, lastUploadedPlate, pendingValidation }: DeviceResultsValidationHomeProps) {
+export function DeviceResultsValidationHome({
+  onUploadClick,
+  onOpenMolecular,
+  lastUploadedPlate,
+  pendingValidation,
+}: DeviceResultsValidationHomeProps) {
   const [search, setSearch] = useState('')
   const [resultFilter, setResultFilter] = useState('All Results')
   const [statusFilter, setStatusFilter] = useState('All')
@@ -152,6 +183,7 @@ export function DeviceResultsValidationHome({ onUploadClick, lastUploadedPlate, 
                 : {}),
             }}
             onUpload={card.isMolecular ? onUploadClick : undefined}
+            onOpen={card.isMolecular ? onOpenMolecular : undefined}
           />
         ))}
       </div>
