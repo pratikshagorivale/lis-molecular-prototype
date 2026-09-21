@@ -311,27 +311,26 @@ export function MolecularReportEntryPage({
                       Not traced to a plate — this result was not released from a molecular plate validation run.
                     </p>
                   ) : (
-                    <ul className="space-y-1.5">
+                    <ul className="space-y-1">
                       {sourcePlates.map((plate) => {
                         const well = plate.samples.find((sample) => sample.sampleId === report.sampleId)
                         return (
-                          <li key={plate.plateId} className="border border-slate-200 rounded px-2 py-1.5">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-slate-800 font-medium">{plate.plateId}</span>
-                              <Badge variant={PLATE_STATUS_VARIANT[plate.status]}>{plate.status}</Badge>
-                            </div>
-                            <p className="text-[11px] text-slate-500 mt-0.5">
-                              {plate.runDate}{well ? ` · well ${well.wellId}` : ''}
-                            </p>
-                            {plate.releasedBy && (
-                              <p className="text-[11px] text-slate-500">Released by {plate.releasedBy}</p>
-                            )}
+                          <li key={plate.plateId}>
                             <button
                               type="button"
                               onClick={() => setAuditPlateId(plate.plateId)}
-                              className="mt-1.5 text-[11px] font-medium text-blue-600 hover:text-blue-700"
+                              title={`View the audit trail for plate ${plate.plateId}`}
+                              className="w-full text-left border border-slate-200 rounded px-2 py-1.5 hover:border-blue-300 hover:bg-blue-50 focus:outline-none focus:ring-1 focus:ring-blue-500"
                             >
-                              View audit trail
+                              <span className="flex items-center justify-between gap-2">
+                                <span className="text-blue-600 font-medium">{plate.plateId}</span>
+                                <Badge variant={PLATE_STATUS_VARIANT[plate.status]}>{plate.status}</Badge>
+                              </span>
+                              <span className="block text-[11px] text-slate-500">
+                                {plate.runDate}
+                                {well ? ` · ${well.wellId}` : ''}
+                                {plate.releasedBy ? ` · ${plate.releasedBy}` : ''}
+                              </span>
                             </button>
                           </li>
                         )
