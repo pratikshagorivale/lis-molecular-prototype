@@ -17,16 +17,39 @@ interface MolecularReportEntryPageProps {
   onCloseCapa: (plateId: string, capaId: string) => void
 }
 
-function ResultInput({ value, className = '' }: { value: string; className?: string }) {
+function ResultInput({
+  value,
+  className = '',
+  released = false,
+}: {
+  value: string
+  className?: string
+  /** Marks a value that came from a plate validation release rather than typed in. */
+  released?: boolean
+}) {
+  const showTick = released && value.trim() !== ''
   return (
-    <input
-      // Uncontrolled so it stays typeable; keyed on the value so selecting another
-      // patient remounts it with their result instead of keeping the last one.
-      key={value}
-      type="text"
-      defaultValue={value}
-      className={`w-full min-w-[80px] px-2 py-1 border border-slate-200 rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 ${className}`}
-    />
+    <span className="relative block">
+      <input
+        // Uncontrolled so it stays typeable; keyed on the value so selecting another
+        // patient remounts it with their result instead of keeping the last one.
+        key={value}
+        type="text"
+        defaultValue={value}
+        className={`w-full min-w-[80px] px-2 py-1 border border-slate-200 rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 ${showTick ? 'pr-6' : ''} ${className}`}
+      />
+      {showTick && (
+        <span
+          title="Released from plate validation"
+          className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none"
+        >
+          <svg className="w-3 h-3 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3} aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+          <span className="sr-only">Released from plate validation</span>
+        </span>
+      )}
+    </span>
   )
 }
 
@@ -121,6 +144,9 @@ export function MolecularReportEntryPage({
   )
   const auditPlate = sourcePlates.find((plate) => plate.plateId === auditPlateId) ?? null
 
+  /** Ticked values came off a plate release, not the keyboard. */
+  const fromValidation = sourcePlates.length > 0 || Boolean(reportOverride)
+
   const filteredQueue = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return queue
@@ -210,7 +236,7 @@ export function MolecularReportEntryPage({
               renderCells={(row) => [
                 <span key="n" className="text-slate-800">{row.name}</span>,
                 <span key="c" className="text-slate-600">{row.cutOff}</span>,
-                <ResultInput key="r" value={row.result} />,
+                <ResultInput key="r" value={row.result} released={fromValidation} />,
                 <ResultInput key="i" value={row.interpretation} />,
               ]}
             />
@@ -222,7 +248,7 @@ export function MolecularReportEntryPage({
               rows={report.organisms}
               renderCells={(row) => [
                 <span key="n" className="text-slate-800">{row.name}</span>,
-                <ResultInput key="r" value={row.result} />,
+                <ResultInput key="r" value={row.result} released={fromValidation} />,
                 <ResultInput key="i" value={row.interpretation} />,
                 <span key="c" className="text-slate-600">{row.cutOff}</span>,
                 <ResultInput key="v" value={row.viralLoad ?? ''} />,
@@ -239,7 +265,7 @@ export function MolecularReportEntryPage({
               renderCells={(row) => [
                 <span key="n" className="text-slate-800">{row.name}</span>,
                 <span key="c" className="text-slate-600">{row.cutOff}</span>,
-                <ResultInput key="r" value={row.result} className={row.result === '-' ? 'text-red-500' : ''} />,
+                <ResultInput key="r" value={row.result} released={fromValidation} className={row.result === '-' ? 'text-red-500' : ''} />,
                 <ResultInput key="i" value={row.interpretation} />,
                 <span key="a" className="text-slate-700">{row.antibioticName}</span>,
               ]}
