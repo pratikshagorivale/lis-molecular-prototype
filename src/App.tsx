@@ -319,6 +319,16 @@ function App() {
     setScreen('validation')
   }, [plateRegistry])
 
+  /** Jump from a report to the plate its results came from. */
+  const handleOpenPlateFromReport = useCallback((plateId: string) => {
+    const plate = plateRegistry.find((p) => p.plateId.toUpperCase() === plateId.toUpperCase())
+    if (!plate) return
+    setUploadData(buildUploadDataForPlate(plate))
+    setSelectedWell(null)
+    setActiveNav('device-validation')
+    setScreen('validation')
+  }, [plateRegistry])
+
   /**
    * Swap the validation view to another plate from the registry. Skipped once a real
    * file is loaded, so an actual upload is never replaced by demo results.
@@ -439,8 +449,11 @@ function App() {
           entry={selectedWaitingEntry}
           queue={partiallyCompletedEntries}
           reportOverride={reportResultsCache[selectedWaitingEntry.id] ?? null}
+          plateRegistry={plateRegistry}
           onBack={() => setWaitingView('list')}
           onSelectEntry={setSelectedWaitingEntry}
+          onOpenPlate={handleOpenPlateFromReport}
+          onCloseCapa={handleCloseCapa}
         />
       )}
       {activeNav === 'qc' && qcView === 'list' && (

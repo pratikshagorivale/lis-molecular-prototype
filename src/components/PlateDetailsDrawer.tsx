@@ -74,8 +74,12 @@ interface PlateDetailsDrawerProps {
   highlightSampleId?: string
   onClose: () => void
   onOpenPlateView: (plateId: string) => void
-  onRaiseCapa: (plateId: string) => void
+  /** Omitted where CAPA cannot be raised from, e.g. the report entry screen. */
+  onRaiseCapa?: (plateId: string) => void
   onCloseCapa: (plateId: string, capaId: string) => void
+  /** Opening from a report goes straight to the trail; elsewhere the summary reads first. */
+  initialTab?: PlateDetailTab
+  openPlateViewLabel?: string
 }
 
 export function PlateDetailsDrawer({
@@ -85,9 +89,11 @@ export function PlateDetailsDrawer({
   onOpenPlateView,
   onRaiseCapa,
   onCloseCapa,
+  initialTab,
+  openPlateViewLabel = 'Open in Plate View',
 }: PlateDetailsDrawerProps) {
   // Arriving from a Sample ID search lands directly on that sample.
-  const [tab, setTab] = useState<PlateDetailTab>(highlightSampleId ? 'samples' : 'summary')
+  const [tab, setTab] = useState<PlateDetailTab>(initialTab ?? (highlightSampleId ? 'samples' : 'summary'))
   const [sampleSearch, setSampleSearch] = useState(highlightSampleId ?? '')
 
   const qcFailed = plate.qcOutcome !== 'Passed'
@@ -111,7 +117,7 @@ export function PlateDetailsDrawer({
       title={`Plate ${plate.plateId}`}
       footer={
         <div className="flex items-center justify-end gap-2">
-          {uncovered.length > 0 && (
+          {onRaiseCapa && uncovered.length > 0 && (
             <button
               onClick={() => onRaiseCapa(plate.plateId)}
               className="px-3 py-1.5 border border-amber-400 text-amber-700 rounded text-xs font-medium hover:bg-amber-50"
@@ -123,7 +129,7 @@ export function PlateDetailsDrawer({
             onClick={() => onOpenPlateView(plate.plateId)}
             className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700"
           >
-            Open in Plate View
+            {openPlateViewLabel}
           </button>
         </div>
       }
@@ -281,7 +287,7 @@ export function PlateDetailsDrawer({
                   ? 'This plate has a QC failure. Recording a CAPA is optional but recommended.'
                   : 'CAPA is normally raised only against a QC failure.'}
               </p>
-              {uncovered.length > 0 && (
+              {onRaiseCapa && uncovered.length > 0 && (
                 <button
                   onClick={() => onRaiseCapa(plate.plateId)}
                   className="mt-3 px-3 py-1.5 border border-amber-400 text-amber-700 rounded text-xs font-medium hover:bg-amber-50"

@@ -1,13 +1,20 @@
 import { useMemo, useState } from 'react'
 import { buildMolecularReport } from '../data/reportEntryMockData'
-import type { MolecularReportData, ReportResultRow, WaitingListEntry } from '../types'
+import { PlateDetailsDrawer } from '../components/PlateDetailsDrawer'
+import { Badge } from '../components/ui/Badge'
+import { PLATE_STATUS_VARIANT } from '../components/plateStatusStyles'
+import { tracePlates } from '../utils/plateTracking'
+import type { MolecularReportData, PlateRecord, ReportResultRow, WaitingListEntry } from '../types'
 
 interface MolecularReportEntryPageProps {
   entry: WaitingListEntry
   queue: WaitingListEntry[]
   reportOverride?: MolecularReportData | null
+  plateRegistry: PlateRecord[]
   onBack: () => void
   onSelectEntry: (entry: WaitingListEntry) => void
+  onOpenPlate: (plateId: string) => void
+  onCloseCapa: (plateId: string, capaId: string) => void
 }
 
 function ResultInput({ value, className = '' }: { value: string; className?: string }) {
@@ -87,12 +94,29 @@ function SectionTable({
   )
 }
 
-export function MolecularReportEntryPage({ entry, queue, reportOverride, onBack, onSelectEntry }: MolecularReportEntryPageProps) {
+export function MolecularReportEntryPage({
+  entry,
+  queue,
+  reportOverride,
+  plateRegistry,
+  onBack,
+  onSelectEntry,
+  onOpenPlate,
+  onCloseCapa,
+}: MolecularReportEntryPageProps) {
+  const [auditPlateId, setAuditPlateId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const report = useMemo(
     () => reportOverride ?? buildMolecularReport(entry),
     [entry, reportOverride],
   )
+
+  /** The plates this sample was run on — a re-run puts the same sample on more than one. */
+  const sourcePlates = useMemo(
+    () => tracePlates(plateRegistry, report.sampleId).sampleHits.map((hit) => hit.plate),
+    [plateRegistry, report.sampleId],
+  )
+  const auditPlate = sourcePlates.find((plate) => plate.plateId === auditPlateId) ?? null
 
   const filteredQueue = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -273,6 +297,46 @@ export function MolecularReportEntryPage({ entry, queue, reportOverride, onBack,
                   <dd className="text-slate-800 font-medium mt-0.5 break-words">{value}</dd>
                 </div>
               ))}
+
+              <div className="pt-2.5 border-t border-slate-200">
+                <dt className="text-slate-500 mb-1">
+                  Source {sourcePlates.length === 1 ? 'Plate' : 'Plates'}
+                </dt>
+                <dd>
+                  {sourcePlates.length === 0 ? (
+                    <p className="text-slate-500">
+                      Not traced to a plate — this result was not released from a molecular run.
+                    </p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {sourcePlates.map((plate) => {
+                        const well = plate.samples.find((sample) => sample.sampleId === report.sampleId)
+                        return (
+                          <li key={plate.plateId} className="border border-slate-200 rounded px-2 py-1.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-slate-800 font-medium">{plate.plateId}</span>
+                              <Badge variant={PLATE_STATUS_VARIANT[plate.status]}>{plate.status}</Badge>
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                              {plate.runDate}{well ? ` · well ${well.wellId}` : ''}
+                            </p>
+                            {plate.releasedBy && (
+                              <p className="text-[11px] text-slate-500">Released by {plate.releasedBy}</p>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setAuditPlateId(plate.plateId)}
+                              className="mt-1.5 text-[11px] font-medium text-blue-600 hover:text-blue-700"
+                            >
+                              View audit trail
+                            </button>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )}
+                </dd>
+              </div>
             </dl>
           </aside>
         </div>
@@ -292,6 +356,22 @@ export function MolecularReportEntryPage({ entry, queue, reportOverride, onBack,
           </button>
         </footer>
       </div>
+
+      {auditPlate && (
+        <PlateDetailsDrawer
+          key={auditPlate.plateId}
+          plate={auditPlate}
+          initialTab="audit"
+          highlightSampleId={report.sampleId}
+          openPlateViewLabel="Open Plate"
+          onClose={() => setAuditPlateId(null)}
+          onOpenPlateView={(plateId) => {
+            setAuditPlateId(null)
+            onOpenPlate(plateId)
+          }}
+          onCloseCapa={onCloseCapa}
+        />
+      )}
     </div>
   )
 }

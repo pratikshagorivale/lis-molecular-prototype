@@ -228,7 +228,7 @@ export const PLATE_REGISTRY_MOCK: PlateRecord[] = [
     qcControls: PLATE8_CONTROLS,
     uploadedBy: 'Pratiksha Gorivale',
     uploadedAt: '2026-08-06T09:12:00',
-    samples: buildSamples(727400, 48, 6),
+    samples: buildSamples(727600, 48, 6),
     auditTrail: [
       event('uploaded', 'Pratiksha Gorivale', 'Lab Technologist', '2026-08-06T09:12:00',
         'Plate uploaded from QuantStudio_Plate8_060826.xlsx'),
