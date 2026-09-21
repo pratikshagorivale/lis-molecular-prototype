@@ -303,13 +303,11 @@ export function MolecularReportEntryPage({
 
               <div className="pt-2.5 border-t border-slate-200">
                 <dt className="text-slate-500 mb-1">
-                  Source {sourcePlates.length === 1 ? 'Plate' : 'Plates'}
+                  Source {sourcePlates.length > 1 ? 'Plates' : 'Plate'}
                 </dt>
                 <dd>
                   {sourcePlates.length === 0 ? (
-                    <p className="text-slate-500">
-                      Not traced to a plate — this result was not released from a molecular plate validation run.
-                    </p>
+                    <p className="text-slate-500">Not from a plate validation run.</p>
                   ) : (
                     <ul className="space-y-1">
                       {sourcePlates.map((plate) => {
