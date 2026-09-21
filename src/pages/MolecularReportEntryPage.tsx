@@ -308,7 +308,7 @@ export function MolecularReportEntryPage({
                 <dd>
                   {sourcePlates.length === 0 ? (
                     <p className="text-slate-500">
-                      Not traced to a plate — this result was not released from a molecular run.
+                      Not traced to a plate — this result was not released from a molecular plate validation run.
                     </p>
                   ) : (
                     <ul className="space-y-1.5">
