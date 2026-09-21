@@ -20,6 +20,9 @@ interface MolecularReportEntryPageProps {
 function ResultInput({ value, className = '' }: { value: string; className?: string }) {
   return (
     <input
+      // Uncontrolled so it stays typeable; keyed on the value so selecting another
+      // patient remounts it with their result instead of keeping the last one.
+      key={value}
       type="text"
       defaultValue={value}
       className={`w-full min-w-[80px] px-2 py-1 border border-slate-200 rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 ${className}`}
