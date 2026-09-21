@@ -29,21 +29,21 @@ function ResultInput({
 }) {
   const showTick = released && value.trim() !== ''
   return (
-    <span className="relative block">
+    <span className="flex items-center gap-1.5">
       <input
         // Uncontrolled so it stays typeable; keyed on the value so selecting another
         // patient remounts it with their result instead of keeping the last one.
         key={value}
         type="text"
         defaultValue={value}
-        className={`w-full min-w-[80px] px-2 py-1 border border-slate-200 rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 ${showTick ? 'pr-6' : ''} ${className}`}
+        className={`flex-1 min-w-[80px] px-2 py-1 border border-slate-200 rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 ${className}`}
       />
       {showTick && (
         <span
           title="Released from plate validation"
-          className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none"
+          className="shrink-0 w-4 h-4 rounded-full border border-emerald-500 flex items-center justify-center"
         >
-          <svg className="w-3 h-3 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3} aria-hidden>
+          <svg className="w-2.5 h-2.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3} aria-hidden>
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
           <span className="sr-only">Released from plate validation</span>
