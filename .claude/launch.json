@@ -2,11 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "lis-molecular-prototype",
+      "name": "lis-prototype",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
-      "port": 5180,
-      "url": "http://127.0.0.1:5180"
+      "port": 5180
     }
   ]
 }
