@@ -4,6 +4,7 @@ import {
   managedInstruments as defaultManagedInstruments,
 } from '../data/instrumentManagementMockData'
 import type { ManagedInstrument, TargetedControlTarget, TargetedControlTargetType } from '../types'
+import type { ToxControlConfig } from '../types/toxControl'
 
 const STORAGE_KEY = 'lis-molecular-prototype:managed-instruments'
 
@@ -22,6 +23,19 @@ function normalizeTargets(targets?: TargetedControlTarget[]): TargetedControlTar
   }))
 }
 
+/**
+ * Tox controls saved before the expected-result operator existed have none.
+ * Infer it from what the control is: spiked material was expected at or above
+ * its cut-off, a blank below it — which is what the old code hard-coded.
+ */
+function normalizeToxControls(controls?: ToxControlConfig[]): ToxControlConfig[] | undefined {
+  if (!controls) return undefined
+  return controls.map((control) => ({
+    ...control,
+    operator: control.operator ?? (control.controlType === 'Blank' ? '<' : '>='),
+  }))
+}
+
 function normalizeInstruments(instruments: ManagedInstrument[]): ManagedInstrument[] {
   return instruments.map((instrument) => ({
     ...instrument,
@@ -29,6 +43,7 @@ function normalizeInstruments(instruments: ManagedInstrument[]): ManagedInstrume
       ...control,
       targets: normalizeTargets(control.targets),
     })),
+    toxControls: normalizeToxControls(instrument.toxControls),
   }))
 }
 

@@ -6,6 +6,8 @@ interface ReleaseConfirmationModalProps {
   onConfirm: () => void
   mode: 'plate' | 'selected' | 'valid-only'
   plateId: string
+  /** Names the discipline in the heading; molecular when not given. */
+  title?: string
   validCount?: number
   totalCount?: number
 }
@@ -16,6 +18,7 @@ export function ReleaseConfirmationModal({
   onConfirm,
   mode,
   plateId,
+  title = 'Release Molecular Results',
   validCount = 0,
   totalCount = 0,
 }: ReleaseConfirmationModalProps) {
@@ -30,7 +33,7 @@ export function ReleaseConfirmationModal({
     <Modal
       open={open}
       onClose={onClose}
-      title="Release Molecular Results"
+      title={title}
       size="md"
       footer={
         <div className="flex items-center justify-end gap-2">

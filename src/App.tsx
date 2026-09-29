@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AppLayout } from './components/layout/AppLayout'
 import { DeviceResultsValidationHome } from './pages/DeviceResultsValidationHome'
 import { MolecularValidation } from './pages/MolecularValidation'
@@ -6,6 +6,35 @@ import { WaitingListPage } from './pages/WaitingListPage'
 import { MolecularReportEntryPage } from './pages/MolecularReportEntryPage'
 import { InstrumentManagementListPage } from './pages/InstrumentManagementListPage'
 import { InstrumentDetailPage } from './pages/InstrumentDetailPage'
+import { ToxDeviceValidation } from './pages/ToxDeviceValidation'
+import {
+  UploadToxResultsModal,
+  type PlateLayoutChoice,
+  type PlateOverrides,
+} from './components/tox/UploadToxResultsModal'
+import {
+  applyTemplate,
+  buildToxBatchFromTable,
+  filterToxBatchByPositions,
+  loadToxDemoBatch,
+  readToxFile,
+  type ToxFileContext,
+} from './utils/parseToxFile'
+import { TOX_TEMPLATE_CATALOGUE } from './data/toxTemplates'
+import {
+  TOX_INSTRUMENTS,
+  instrumentForTemplate,
+  templateForInstrument,
+  type ToxInstrument,
+} from './data/toxInstruments'
+import type { ToxDrugCutOff } from './data/toxDrugs'
+import { mergeToxBatchIntoRegistry } from './utils/toxPlateRecord'
+import { demoFileForPlate } from './data/toxDemoPlates'
+import { batchCounts } from './utils/toxEvaluation'
+import type { ToxReleaseMode } from './pages/ToxDeviceValidation'
+import type { ToxBatch } from './types/tox'
+import type { TemplateFileCheck } from './types/toxTemplate'
+import type { ToxControlConfig } from './types/toxControl'
 import { partiallyCompletedEntries } from './data/waitingListMockData'
 import { loadManagedInstruments, saveManagedInstruments } from './utils/instrumentStorage'
 import {
@@ -81,6 +110,18 @@ function App() {
   const [managedInstruments, setManagedInstruments] = useState<ManagedInstrument[]>(() => loadManagedInstruments())
   const [selectedManagedInstrumentId, setSelectedManagedInstrumentId] = useState<string | null>(null)
   const [plateRegistry, setPlateRegistry] = useState<PlateRecord[]>(() => loadPlateRegistry())
+
+  // Toxicology. Parsers ship in the catalogue, so the upload flow is: pick the
+  // instrument, check the file fits, review, continue. Nothing is mapped here.
+  const [toxBatch, setToxBatch] = useState<ToxBatch | null>(null)
+  const [toxInstrument, setToxInstrument] = useState('')
+  const [toxParsing, setToxParsing] = useState(false)
+  const [toxModalOpen, setToxModalOpen] = useState(false)
+  const [toxFileContext, setToxFileContext] = useState<ToxFileContext | null>(null)
+  const [toxPendingBatch, setToxPendingBatch] = useState<ToxBatch | null>(null)
+  const [toxUploadError, setToxUploadError] = useState<string | null>(null)
+  const [toxInstrumentPick, setToxInstrumentPick] = useState<ToxInstrument | null>(null)
+  const [toxCheck, setToxCheck] = useState<TemplateFileCheck | null>(null)
 
   /** Single write path for the registry so every audit entry is persisted the same way. */
   const updateRegistry = useCallback((updater: (prev: PlateRecord[]) => PlateRecord[]) => {
@@ -394,6 +435,32 @@ function App() {
     setToast('Control configuration saved.')
   }, [])
 
+  const handleUpdateToxControls = useCallback((instrumentId: string, controls: ToxControlConfig[]) => {
+    setManagedInstruments((prev) => {
+      const next = prev.map((instrument) => (
+        instrument.id === instrumentId ? { ...instrument, toxControls: controls } : instrument
+      ))
+      saveManagedInstruments(next)
+      return next
+    })
+    // The loaded batch was judged by the old configuration, so drop it rather
+    // than leave a stale verdict on screen.
+    setToxBatch(null)
+    setToast('Control configuration saved.')
+  }, [])
+
+  const handleUpdateToxDrugs = useCallback((instrumentId: string, drugs: ToxDrugCutOff[]) => {
+    setManagedInstruments((prev) => {
+      const next = prev.map((instrument) => (
+        instrument.id === instrumentId ? { ...instrument, toxDrugs: drugs } : instrument
+      ))
+      saveManagedInstruments(next)
+      return next
+    })
+    setToxBatch(null)
+    setToast('Reporting cut-offs saved.')
+  }, [])
+
   const handleCloseCapa = useCallback((capaPlateId: string, capaId: string) => {
     updateRegistry((prev) => closeCapaOnPlate(prev, capaPlateId, capaId))
     setToast(`${capaId} closed.`)
@@ -403,6 +470,280 @@ function App() {
     setSelectedWaitingEntry(entry)
     setWaitingView('report')
   }, [])
+
+  /**
+   * A chosen parser either reads the file or refuses it. There is no mapping
+   * step to fall back on, so the check is the gate.
+   */
+  const readWithTemplate = useCallback(
+    (
+      result: { context: ToxFileContext; check: TemplateFileCheck },
+      controls: ToxControlConfig[],
+      panel?: string,
+      drugCutOffs?: ToxDrugCutOff[],
+    ) => {
+      setToxFileContext(result.context)
+      setToxCheck(result.check)
+      if (!result.check.ok) {
+        setToxPendingBatch(null)
+        return
+      }
+      try {
+        setToxPendingBatch(buildToxBatchFromTable(
+          result.context.fileName,
+          result.context.table,
+          result.context.template,
+          controls,
+          panel,
+          drugCutOffs,
+        ))
+        setToxUploadError(null)
+      } catch (err) {
+        setToxPendingBatch(null)
+        setToxUploadError(err instanceof Error ? err.message : 'That file could not be parsed')
+      }
+    }, [])
+
+  /**
+   * Upload is always opened from a device card, and a device writes one export
+   * format — so the instrument, and with it the parser, is settled here rather
+   * than asked for in the modal.
+   */
+  const handleToxUploadClick = useCallback((toxInstrumentId?: string) => {
+    setToxFileContext(null)
+    setToxPendingBatch(null)
+    setToxUploadError(null)
+    setToxInstrumentPick(
+      TOX_INSTRUMENTS.find((i) => i.id === toxInstrumentId) ?? TOX_INSTRUMENTS[0],
+    )
+    setToxCheck(null)
+    setToxModalOpen(true)
+  }, [])
+
+  /** Back to the parser picker, keeping nothing from the rejected attempt. */
+  const handleToxReset = useCallback(() => {
+    setToxFileContext(null)
+    setToxPendingBatch(null)
+    setToxUploadError(null)
+    setToxCheck(null)
+  }, [])
+
+  /** The configured controls for the device the technologist picked. */
+  const managedFor = useCallback((instrument: ToxInstrument | null) => (
+    instrument
+      ? managedInstruments.find(
+          (m) => m.isToxicology && (m.id === instrument.id || m.name === instrument.name),
+        )
+      : undefined
+  ), [managedInstruments])
+
+  const toxControlsFor = useCallback(
+    (instrument: ToxInstrument | null): ToxControlConfig[] => managedFor(instrument)?.toxControls ?? [],
+    [managedFor],
+  )
+
+  /** The lab's reporting cut-offs, which decide every patient result. */
+  const toxDrugsFor = useCallback(
+    (instrument: ToxInstrument | null): ToxDrugCutOff[] | undefined => managedFor(instrument)?.toxDrugs,
+    [managedFor],
+  )
+
+  const handleToxFileSelect = useCallback(async (file: File, instrument: ToxInstrument) => {
+    const template = templateForInstrument(instrument)
+    if (!template) {
+      setToxUploadError(`No parser is configured for ${instrument.name}.`)
+      return
+    }
+    setToxParsing(true)
+    setToxUploadError(null)
+    try {
+      readWithTemplate(
+        await readToxFile(file, template, TOX_TEMPLATE_CATALOGUE),
+        toxControlsFor(instrument),
+        instrument.panel,
+        toxDrugsFor(instrument),
+      )
+    } catch (err) {
+      setToxUploadError(err instanceof Error ? err.message : 'Could not read that file')
+      setToxFileContext(null)
+      setToxPendingBatch(null)
+    } finally {
+      setToxParsing(false)
+    }
+  }, [readWithTemplate, toxControlsFor, toxDrugsFor])
+
+  /** Retry the loaded file as the instrument the mismatch notice suggested. */
+  const handleToxUseInstrument = useCallback((instrument: ToxInstrument) => {
+    setToxInstrumentPick(instrument)
+    const template = templateForInstrument(instrument)
+    if (!toxFileContext || !template) return
+    readWithTemplate(
+      applyTemplate(toxFileContext, template, TOX_TEMPLATE_CATALOGUE),
+      toxControlsFor(instrument),
+      instrument.panel,
+      toxDrugsFor(instrument),
+    )
+  }, [toxFileContext, readWithTemplate, toxControlsFor, toxDrugsFor])
+
+  /** The instrument whose parser does fit, when the chosen one does not. */
+  const toxSuggestion = toxCheck?.suggestion
+    ? instrumentForTemplate(toxCheck.suggestion.id, TOX_INSTRUMENTS)
+    : null
+
+  /**
+   * Re-read under an adjusted layout. How the run was pipetted is a fact the
+   * instrument does not record, so a plain vial number becomes a well only
+   * when the lab says the run was plated.
+   */
+  const handleToxLayoutChange = useCallback((layout: PlateLayoutChoice) => {
+    if (!toxFileContext) return
+    const base = toxFileContext.template
+    const adjusted = layout === 'rack'
+      ? { ...base, position: { ...base.position, fill: undefined }, plateSize: 'auto' as const }
+      : {
+          ...base,
+          position: { ...base.position, fill: 'row-major' as const },
+          plateSize: Number(layout) as 96 | 384,
+        }
+    try {
+      setToxPendingBatch(buildToxBatchFromTable(
+        toxFileContext.fileName,
+        toxFileContext.table,
+        adjusted,
+        toxControlsFor(toxInstrumentPick),
+        toxInstrumentPick?.panel,
+        toxDrugsFor(toxInstrumentPick),
+      ))
+    } catch (err) {
+      setToxUploadError(err instanceof Error ? err.message : 'That layout could not be applied')
+    }
+  }, [toxFileContext, toxInstrumentPick, toxControlsFor, toxDrugsFor])
+
+  const handleToxContinue = useCallback((
+    selectedPositionIds: string[],
+    overrides: PlateOverrides,
+  ) => {
+    if (!toxPendingBatch) return
+    const filtered = filterToxBatchByPositions(toxPendingBatch, new Set(selectedPositionIds))
+    // The instrument the technologist picked is the batch's identity — not a
+    // string scraped out of the file, and not whichever card was clicked. The
+    // plate id and run date are theirs to correct.
+    setToxBatch({
+      ...filtered,
+      instrument: toxInstrumentPick?.name ?? filtered.instrument,
+      batchId: overrides.plateId.trim() || filtered.batchId,
+      runDate: overrides.runDate || filtered.runDate,
+    })
+    setToxModalOpen(false)
+    setActiveNav('device-validation')
+    setScreen('tox-validation')
+    setToxInstrument(toxInstrumentPick?.name ?? filtered.instrument)
+    setToast(`${selectedPositionIds.length} sample${selectedPositionIds.length === 1 ? '' : 's'} loaded for validation.`)
+  }, [toxPendingBatch, toxInstrumentPick])
+
+  const loadToxBatch = useCallback(async (fileName: string) => {
+    setToxParsing(true)
+    try {
+      setToxBatch(await loadToxDemoBatch(fileName, (instrumentName) => {
+        const managed = managedInstruments.find(
+          (m) => m.isToxicology && m.name === instrumentName,
+        )
+        return { controls: managed?.toxControls ?? [], drugCutOffs: managed?.toxDrugs }
+      }))
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : 'Could not load the toxicology batch')
+    } finally {
+      setToxParsing(false)
+    }
+  }, [managedInstruments])
+
+  const handleOpenTox = useCallback((instrumentName: string) => {
+    setToxInstrument(instrumentName)
+    setActiveNav('device-validation')
+    setScreen('tox-validation')
+    if (!toxBatch) loadToxBatch('15SEP2026_LCMS6_MP_301.csv')
+  }, [toxBatch, loadToxBatch])
+
+  /**
+   * A toxicology plate is tracked in the same registry molecular uses, so its
+   * audit trail and CAPAs sit alongside every other plate. The batch is folded
+   * in on the way past, in case this is the first action taken on it.
+   */
+  const handleToxRelease = useCallback((mode: ToxReleaseMode) => {
+    const plateId = toxBatch?.batchId ?? ''
+    if (!toxBatch || !plateId) return
+
+    const counts = batchCounts(toxBatch)
+    const valid = counts.samples - counts.invalid
+    const whole = mode === 'plate'
+    const { summary, status, toast } = whole
+      ? {
+          summary: `Released all ${counts.samples} sample results to LIS reports`,
+          status: 'Released' as const,
+          toast: `All ${counts.samples} sample results released successfully.`,
+        }
+      : mode === 'valid-only'
+        ? {
+            summary: `Released ${valid} of ${counts.samples} samples to LIS reports`,
+            status: 'Partially Released' as const,
+            toast: `${valid} valid sample result${valid === 1 ? '' : 's'} released successfully.`,
+          }
+        : {
+            summary: 'Released selected sample results to LIS reports',
+            status: 'Partially Released' as const,
+            toast: 'Selected results released successfully.',
+          }
+
+    updateRegistry((prev) => appendAuditEvent(
+      mergeToxBatchIntoRegistry(prev, toxBatch),
+      plateId,
+      createAuditEvent('released', summary),
+      whole
+        ? { status, releasedBy: CURRENT_USER.name, releasedAt: new Date().toISOString() }
+        : { status },
+    ))
+    // The screen has to show the outcome, not just announce it.
+    setToxBatch((prev) => (prev ? { ...prev, status } : prev))
+    setToast(toast)
+  }, [toxBatch, updateRegistry])
+
+  /**
+   * Reopen another toxicology plate. The registry keeps what a run produced,
+   * not the run itself, so a plate can only be reopened while its export is
+   * still available — the demo ones are, an uploaded one is not.
+   */
+  const handleLoadToxPlate = useCallback((plateId: string) => {
+    if (plateId === toxBatch?.batchId) return
+    const fileName = demoFileForPlate(plateId)
+    if (!fileName) {
+      setToast(`Upload the export for Plate ${plateId} again to open it.`)
+      return
+    }
+    loadToxBatch(fileName)
+  }, [toxBatch, loadToxBatch])
+
+  const handleToxReleaseResult = useCallback((sampleId: string, compound: string) => {
+    setToast(`${compound} on ${sampleId} released to the LIS report.`)
+  }, [])
+
+  const handleToxReject = useCallback((reason: string) => {
+    const plateId = toxBatch?.batchId ?? ''
+    if (!plateId) return
+    updateRegistry((prev) => appendAuditEvent(
+      mergeToxBatchIntoRegistry(prev, toxBatch),
+      plateId,
+      createAuditEvent('rejected', `Plate rejected — ${reason}`),
+      { status: 'Rejected', rejectedBy: CURRENT_USER.name, rejectedAt: new Date().toISOString() },
+    ))
+    setToxBatch((prev) => (prev ? { ...prev, status: 'Rejected' } : prev))
+    setToast(`Plate ${plateId} rejected. Reason recorded in the audit trail.`)
+  }, [toxBatch, updateRegistry])
+
+  // Derived, so All Plates shows the batch on screen before any action on it.
+  const toxPlates = useMemo(
+    () => mergeToxBatchIntoRegistry(plateRegistry, toxBatch),
+    [plateRegistry, toxBatch],
+  )
 
   const handleWaitingListValidate = useCallback((_entry: WaitingListEntry) => {
     setActiveNav('device-validation')
@@ -415,6 +756,8 @@ function App() {
         <DeviceResultsValidationHome
           onUploadClick={handleUploadClick}
           onOpenMolecular={handleOpenMolecularValidation}
+          onOpenTox={handleOpenTox}
+          onUploadTox={handleToxUploadClick}
           lastUploadedPlate={uploadData?.plateSummary.plateId}
           pendingValidation={uploadData?.validationSummary.validSamples}
         />
@@ -437,6 +780,27 @@ function App() {
           onCloseCapa={handleCloseCapa}
           onLoadPlate={handleLoadPlate}
         />
+      )}
+      {activeNav === 'device-validation' && screen === 'tox-validation' && toxBatch && (
+        <ToxDeviceValidation
+          batch={toxBatch}
+          instrumentName={toxInstrument}
+          parsing={toxParsing}
+          onBack={() => setScreen('home')}
+          onUploadClick={handleToxUploadClick}
+          plates={toxPlates}
+          onLoadPlate={handleLoadToxPlate}
+          onRelease={handleToxRelease}
+          onReleaseResult={handleToxReleaseResult}
+          onReject={handleToxReject}
+          onRaiseCapa={handleRaiseCapa}
+          onCloseCapa={handleCloseCapa}
+        />
+      )}
+      {activeNav === 'device-validation' && screen === 'tox-validation' && !toxBatch && (
+        <div className="flex-1 flex items-center justify-center text-xs text-slate-500">
+          {toxParsing ? 'Parsing toxicology results…' : 'No toxicology batch loaded.'}
+        </div>
       )}
       {activeNav === 'waiting' && waitingView === 'list' && (
         <WaitingListPage
@@ -467,6 +831,8 @@ function App() {
           instrument={selectedManagedInstrument}
           onBack={handleManagedInstrumentBack}
           onUpdateControls={(controls) => handleUpdateInstrumentControls(selectedManagedInstrument.id, controls)}
+          onUpdateToxControls={(controls) => handleUpdateToxControls(selectedManagedInstrument.id, controls)}
+          onUpdateToxDrugs={(drugs) => handleUpdateToxDrugs(selectedManagedInstrument.id, drugs)}
         />
       )}
 
@@ -503,6 +869,23 @@ function App() {
         plateId={plateId}
         validCount={releaseCounts.validCount}
         totalCount={releaseCounts.totalCount}
+      />
+
+      <UploadToxResultsModal
+        open={toxModalOpen}
+        onClose={() => setToxModalOpen(false)}
+        onContinue={handleToxContinue}
+        onLayoutChange={handleToxLayoutChange}
+        onFileSelect={handleToxFileSelect}
+        onUseInstrument={handleToxUseInstrument}
+        selectedInstrument={toxInstrumentPick}
+        suggestion={toxSuggestion}
+        context={toxFileContext}
+        batch={toxPendingBatch}
+        check={toxCheck}
+        onReset={handleToxReset}
+        parsing={toxParsing}
+        error={toxUploadError}
       />
 
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}

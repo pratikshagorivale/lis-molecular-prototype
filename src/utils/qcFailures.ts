@@ -1,19 +1,20 @@
 import type {
   AuditQcResult,
+  MolecularControlKey,
   PlateControlKey,
   PlateQcControl,
   PlateQcFailure,
   QcBanner,
 } from '../types'
 
-const CONTROL_NAMES: Record<PlateControlKey, string> = {
+const CONTROL_NAMES: Record<MolecularControlKey, string> = {
   PC: 'Positive Control',
   NC: 'Negative Control',
   NTC: 'NTC',
   IC: 'Internal Control',
 }
 
-const FAILURE_TEXT: Record<PlateControlKey, string> = {
+const FAILURE_TEXT: Record<MolecularControlKey, string> = {
   PC: 'Positive Control did not amplify within the configured cut-off.',
   NC: 'Negative Control amplified — expected Not Detected.',
   NTC: 'NTC amplified — expected Not Detected.',
@@ -22,7 +23,8 @@ const FAILURE_TEXT: Record<PlateControlKey, string> = {
 
 /** "Positive Control (H10)" — the name plus the wells it occupies. */
 export function controlLabel(control: PlateQcControl): string {
-  const name = CONTROL_NAMES[control.control]
+  // Toxicology controls carry the lab's own name, which is already the label.
+  const name = CONTROL_NAMES[control.control as MolecularControlKey] ?? control.control
   return control.wells.length > 0 ? `${name} (${control.wells.join(', ')})` : name
 }
 
@@ -33,7 +35,9 @@ export function failuresFromControls(controls: PlateQcControl[]): PlateQcFailure
     .map((control) => ({
       control: control.control,
       label: controlLabel(control),
-      summary: control.summary ?? FAILURE_TEXT[control.control],
+      summary: control.summary
+        ?? FAILURE_TEXT[control.control as MolecularControlKey]
+        ?? `${controlLabel(control)} did not meet its configured expectation.`,
     }))
 }
 
@@ -48,7 +52,7 @@ export function auditResultsFromControls(controls: PlateQcControl[]): AuditQcRes
 
 /** Read a parsed upload's QC banner back into the control list. */
 export function controlsFromBanner(banner: QcBanner): PlateQcControl[] {
-  const checks: { control: PlateControlKey; present: boolean; passed: boolean }[] = [
+  const checks: { control: MolecularControlKey; present: boolean; passed: boolean }[] = [
     { control: 'PC', present: banner.pcPresent, passed: banner.pcPassed },
     { control: 'NC', present: banner.ncPresent, passed: banner.ncPassed },
     { control: 'NTC', present: banner.ntcPresent, passed: banner.ntcPassed },
@@ -69,9 +73,9 @@ export function controlsFromBanner(banner: QcBanner): PlateQcControl[] {
 
 /** Build the plate banner from the control list, so the two always agree. */
 export function bannerFromControls(controls: PlateQcControl[]): QcBanner {
-  const find = (key: PlateControlKey) => controls.find((c) => c.control === key)
-  const present = (key: PlateControlKey) => Boolean(find(key))
-  const passed = (key: PlateControlKey) => find(key)?.passed ?? true
+  const find = (key: MolecularControlKey) => controls.find((c) => c.control === key)
+  const present = (key: MolecularControlKey) => Boolean(find(key))
+  const passed = (key: MolecularControlKey) => find(key)?.passed ?? true
 
   const failedControlWells = controls
     .filter((control) => !control.passed)
