@@ -1,6 +1,7 @@
 import type {
   Interpretation,
   ParsedUploadData,
+  MolecularControlKey,
   PlateControlKey,
   PlateRecord,
   PlateSampleRef,
@@ -16,7 +17,7 @@ const ROWS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 const COLS = Array.from({ length: 12 }, (_, i) => i + 1)
 
 /** Reserved for controls, so sample wells never collide with them. */
-export const CONTROL_WELLS: Record<Exclude<PlateControlKey, 'IC'>, string> = {
+export const CONTROL_WELLS: Record<Exclude<MolecularControlKey, 'IC'>, string> = {
   PC: 'H10',
   NC: 'H11',
   NTC: 'H12',
@@ -138,7 +139,7 @@ function sampleWell(
 }
 
 function controlWell(
-  control: Exclude<PlateControlKey, 'IC'>,
+  control: Exclude<MolecularControlKey, 'IC'>,
   plate: PlateRecord,
   failed: boolean,
 ): WellData {

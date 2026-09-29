@@ -62,6 +62,9 @@ export const instruments: InstrumentCard[] = [
     id: 'tox-screen',
     name: 'Toxicology Screening 1',
     category: 'Toxicology',
+    // Each device writes one export format, so it is commissioned against one
+    // parser. The technologist never chooses it.
+    toxInstrumentId: 'orion-s9',
     borderColor: 'border-l-amber-500',
     qcLastSync: '1 day ago',
     paramsLastSync: '1 day ago',
@@ -72,6 +75,7 @@ export const instruments: InstrumentCard[] = [
     id: 'tox-confirm',
     name: 'Toxicology Confirmation Device',
     category: 'Toxicology',
+    toxInstrumentId: 'lcms6',
     borderColor: 'border-l-orange-500',
     qcLastSync: '-',
     paramsLastSync: '-',

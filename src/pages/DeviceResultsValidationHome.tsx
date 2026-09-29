@@ -5,6 +5,8 @@ import type { InstrumentCard } from '../types'
 interface DeviceResultsValidationHomeProps {
   onUploadClick: () => void
   onOpenMolecular?: () => void
+  onOpenTox?: (instrumentName: string) => void
+  onUploadTox?: (toxInstrumentId?: string) => void
   lastUploadedPlate?: string
   pendingValidation?: number
 }
@@ -13,21 +15,25 @@ function InstrumentCardComponent({
   card,
   onUpload,
   onOpen,
+  onReview,
+  onUploadTox,
 }: {
   card: InstrumentCard
   onUpload?: () => void
   onOpen?: () => void
+  onReview?: () => void
+  onUploadTox?: () => void
 }) {
   return (
     <div className={`bg-white border border-slate-200 rounded shadow-sm border-l-4 ${card.borderColor} flex flex-col`}>
       <div className="px-3 py-2 border-b border-slate-100 flex items-start justify-between">
         <button
           type="button"
-          onClick={onOpen}
-          className={`text-left ${onOpen ? 'hover:opacity-80' : ''}`}
-          disabled={!onOpen}
+          onClick={onOpen ?? onReview}
+          className={`text-left ${onOpen || onReview ? 'hover:opacity-80' : ''}`}
+          disabled={!onOpen && !onReview}
         >
-          <h3 className={`text-sm font-semibold ${onOpen ? 'text-blue-700' : 'text-slate-800'}`}>{card.name}</h3>
+          <h3 className={`text-sm font-semibold ${onOpen || onReview ? 'text-blue-700' : 'text-slate-800'}`}>{card.name}</h3>
           <p className="text-[11px] text-slate-500">{card.category}</p>
         </button>
         <button className="p-1 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-50">
@@ -50,6 +56,13 @@ function InstrumentCardComponent({
         </div>
       )}
 
+      {onReview && (
+        <div className="px-3 py-1.5 text-[11px] text-slate-500 flex gap-4 border-b border-slate-50">
+          <span>Last Uploaded Plate: <span className="text-blue-600 font-medium">MP-001</span></span>
+          <span>Pending Validation: <span className="text-amber-600 font-medium">90</span></span>
+        </div>
+      )}
+
       <div className="px-3 py-2 flex-1 space-y-1.5">
         <div className="flex items-center justify-between text-xs">
           <span className="text-slate-600">QC</span>
@@ -64,6 +77,30 @@ function InstrumentCardComponent({
           </span>
         </div>
       </div>
+
+      {onReview && (
+        <div className="px-3 py-2 border-t border-slate-100 flex flex-col gap-1.5">
+          <button
+            type="button"
+            onClick={onReview}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 transition-colors"
+          >
+            Review
+          </button>
+          {onUploadTox && (
+            <button
+              type="button"
+              onClick={onUploadTox}
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 border border-blue-500 text-blue-600 rounded text-xs font-medium hover:bg-blue-50 transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              Upload Results
+            </button>
+          )}
+        </div>
+      )}
 
       {card.isMolecular && (onUpload || onOpen) && (
         <div className="px-3 py-2 border-t border-slate-100 flex flex-col gap-1.5">
@@ -97,6 +134,8 @@ function InstrumentCardComponent({
 export function DeviceResultsValidationHome({
   onUploadClick,
   onOpenMolecular,
+  onOpenTox,
+  onUploadTox,
   lastUploadedPlate,
   pendingValidation,
 }: DeviceResultsValidationHomeProps) {
@@ -184,6 +223,10 @@ export function DeviceResultsValidationHome({
             }}
             onUpload={card.isMolecular ? onUploadClick : undefined}
             onOpen={card.isMolecular ? onOpenMolecular : undefined}
+            onReview={card.category === 'Toxicology' && onOpenTox ? () => onOpenTox(card.name) : undefined}
+            onUploadTox={card.category === 'Toxicology' && onUploadTox
+              ? () => onUploadTox(card.toxInstrumentId)
+              : undefined}
           />
         ))}
       </div>

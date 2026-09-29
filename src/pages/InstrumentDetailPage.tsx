@@ -1,6 +1,10 @@
 import { useState } from 'react'
 import { Badge } from '../components/ui/Badge'
 import { InstrumentControlsTab } from '../components/instrument/InstrumentControlsTab'
+import { ToxControlsTab } from '../components/instrument/ToxControlsTab'
+import { drugNamesForInstrument, drugsForInstrument, type ToxDrugCutOff } from '../data/toxDrugs'
+import { ToxDrugsTab } from '../components/instrument/ToxDrugsTab'
+import type { ToxControlConfig } from '../types/toxControl'
 import type { InstrumentControlConfig, InstrumentDetailTab, ManagedInstrument } from '../types'
 
 const MOLECULAR_TABS: { id: InstrumentDetailTab; label: string }[] = [
@@ -17,10 +21,18 @@ const DEFAULT_TABS: { id: InstrumentDetailTab; label: string }[] = [
   { id: 'controls', label: 'Controls' },
 ]
 
+const TOX_TABS: { id: InstrumentDetailTab; label: string }[] = [
+  { id: 'tests', label: 'Tests' },
+  { id: 'genes', label: 'Drugs' },
+  { id: 'controls', label: 'Controls' },
+]
+
 interface InstrumentDetailPageProps {
   instrument: ManagedInstrument
   onBack: () => void
   onUpdateControls: (controls: InstrumentControlConfig[]) => void
+  onUpdateToxControls?: (controls: ToxControlConfig[]) => void
+  onUpdateToxDrugs?: (drugs: ToxDrugCutOff[]) => void
 }
 
 function TabPlaceholder({ label }: { label: string }) {
@@ -31,8 +43,16 @@ function TabPlaceholder({ label }: { label: string }) {
   )
 }
 
-export function InstrumentDetailPage({ instrument, onBack, onUpdateControls }: InstrumentDetailPageProps) {
-  const tabs = instrument.isMolecular ? MOLECULAR_TABS : DEFAULT_TABS
+export function InstrumentDetailPage({
+  instrument,
+  onBack,
+  onUpdateControls,
+  onUpdateToxControls,
+  onUpdateToxDrugs,
+}: InstrumentDetailPageProps) {
+  const tabs = instrument.isMolecular
+    ? MOLECULAR_TABS
+    : instrument.isToxicology ? TOX_TABS : DEFAULT_TABS
   const [activeTab, setActiveTab] = useState<InstrumentDetailTab>('controls')
 
   const addControl = (control: InstrumentControlConfig) => {
@@ -98,7 +118,18 @@ export function InstrumentDetailPage({ instrument, onBack, onUpdateControls }: I
       </header>
 
       <div className="flex-1 overflow-y-auto p-4 bg-slate-50">
-        {activeTab === 'controls' ? (
+        {activeTab === 'controls' && instrument.isToxicology ? (
+          <ToxControlsTab
+            controls={instrument.toxControls ?? []}
+            availableDrugs={drugNamesForInstrument(instrument.templateId)}
+            onChange={(controls) => onUpdateToxControls?.(controls)}
+          />
+        ) : activeTab === 'genes' && instrument.isToxicology ? (
+          <ToxDrugsTab
+            drugs={instrument.toxDrugs ?? drugsForInstrument(instrument.templateId)}
+            onChange={(drugs) => onUpdateToxDrugs?.(drugs)}
+          />
+        ) : activeTab === 'controls' ? (
           <InstrumentControlsTab
             controls={instrument.controls}
             onAddControl={addControl}

@@ -134,6 +134,8 @@ export interface InstrumentCard {
   qcCount?: number
   paramsCount?: number
   isMolecular?: boolean
+  /** Which toxicology instrument this card is, and so which parser reads it. */
+  toxInstrumentId?: string
 }
 
 export interface FieldMapping {
@@ -212,7 +214,15 @@ export type PlateLifecycleStatus =
 export type PlateQcOutcome = 'Passed' | 'Failed'
 
 /** Control types a plate's QC can fail on. IC is measured inside sample wells. */
-export type PlateControlKey = 'PC' | 'NC' | 'NTC' | 'IC'
+/** The four fixed controls a molecular plate always reports. */
+export type MolecularControlKey = 'PC' | 'NC' | 'NTC' | 'IC'
+
+/**
+ * How a control is keyed on a plate record. Molecular uses the four fixed
+ * keys; toxicology keys on the control name the lab configured, because there
+ * is no fixed set — a panel may run L1..L3, QC L, QC N, or a named calibrator.
+ */
+export type PlateControlKey = MolecularControlKey | (string & {})
 
 /**
  * One control evaluated on a plate. This list is the single source of truth for
@@ -373,7 +383,7 @@ export interface ParsedUploadData {
   plateSize: PlateSize
 }
 
-export type Screen = 'home' | 'validation'
+export type Screen = 'home' | 'validation' | 'tox-validation'
 
 export type QcView = 'list' | 'detail'
 
@@ -429,6 +439,13 @@ export interface ManagedInstrument {
   enabled: boolean
   isMolecular?: boolean
   controls: InstrumentControlConfig[]
+  /** Toxicology devices configure controls against drugs, not targets. */
+  isToxicology?: boolean
+  toxControls?: import('./toxControl').ToxControlConfig[]
+  /** Reporting cut-offs, one per drug on the panel. Decides patient results. */
+  toxDrugs?: import('../data/toxDrugs').ToxDrugCutOff[]
+  /** Which parser reads this device's export. */
+  templateId?: string
 }
 
 export interface AddControlFormData {
